@@ -1,115 +1,59 @@
-# Nafinity
+# Working in this repository
 
-A ticket and kanban application built to show what NAF can carry. Business rules live in
-application services; routing, auth, policies, views, form/CSRF, PDO/migrations, ORM,
-events, queue, scheduler, mail and translation come from NAF packages.
+This is the Nafinity skeleton: an installation, not the application. The product lives
+in `naf/board` and arrives through Composer. If a change belongs to how Nafinity
+*works*, it belongs in that repository, not here.
 
 ## Layout
 
-- `app/` — the Composer application. `app/app/` is its source; `app/public` is the only web root.
-- `packages` — symlink to `../nafphp`. Fix generic defects there, in the owning repository,
-  following its own `AGENTS.md`. Never edit `app/vendor/`.
-- `examples/` — two extension packages that the acceptance run really installs.
-- `docker/rootfs` — mirrors container paths; the Dockerfile copies the tree to `/`.
-- `tools/style` — pinned formatters, kept out of the build context and the runtime image.
-- `work/` — scratch: backups, TLS, disposable test hosts. Never committed.
+    app/composer.json      what this installation requires
+    app/bootstrap.php      autoload, BASE_PATH, run -- and nothing else
+    app/src/               the owner's code, namespace Nafinity\
+    app/src/plugins.php    boot order; naf/board is pinned first on purpose
+    app/src/extensions.php optional, runs last, may replace or remove anything
+    app/src/views/         a template here wins over the package's
+    app/public/index.php   the entry point
+    app/storage/           uploads, sessions, queue and scheduler state
+    docker/, Makefile      how it runs locally
 
-## Before adding an abstraction
+Nothing under `app/src/` is generated or owned by the board. Adding to it is the normal
+way to work; there is no file here that a person is expected not to touch.
 
-Read the NAF package source first and use what is already there: helpers, DI, events,
-policies, forms, migrations, ORM, queue, scheduler. A new optional capability belongs in a
-separate Composer package rather than in the core — the extension platform below exists for
-that. Do not rebuild onto a CMS, Laravel, a second container, a router, an event bus, an ORM
-or a plugin metaframework.
+## Before changing something here
 
-## Data and authorization
+Ask whether the host is really the right place. Three things belong here and almost
+nothing else does:
 
-- Every read and write path requires project authorization. Composite foreign keys give
-  integrity, not read authorization.
-- Writes carry a ticket version; a stale write ends with 409 and the interface offers a reload.
-- Attachments are private: 10 MiB per file, 30 MiB per ticket, 200 MiB per project, reached
-  only through the application via `Naf\Storage\storage('attachments')`. The allowlist and
-  MIME check are not a virus scanner.
-- A board query answers with at most 300 cards plus the total count.
-- German is the complete base language of the product UI; English covers the main
-  interface texts. Code, comments and documentation are English.
+- **Deployment decisions** -- configuration, `.env`, Docker, what is installed.
+- **Overrides** -- a template in `app/src/views/`, a definition changed in
+  `app/src/extensions.php`.
+- **The owner's own code** -- anything in `Nafinity\`.
 
-## Extensibility
-
-An installed Composer package of `type: naf-plugin` contributes routes, controllers,
-services, menu entries, permissions, settings, ticket fields, widgets, board filters,
-translations, AI tools, commands, migrations and jobs. It registers providers in its
-bootstrap through `Nafinity\extensions()->register(...)`; all providers run in one pass
-after the application's own defaults, so a package can replace what the application
-registered.
-
-- Every registry sorts by one `index`, ties broken by `strcmp()` on the id. Replacing an
-  existing id is explicit, never accidental.
-- Title, description and comments are fixed ticket areas (`TicketFieldRegistry::FIXED_AREAS`,
-  `UiRegistry::RESERVED_IDS`) and can be neither replaced nor removed.
-- Contributed ticket values live in `ticket_metadata`, one row per key, written inside the
-  existing domain transaction, project lock and version check.
-- Settings have four scopes: `user`, `project`, `project_user`, `application`.
-- A slot hands its contributions a typed context, not a loose array. Use that context and its
-  `value()` and `field` instead of reaching for an own query or form.
-- Uninstalling a package takes its contributions away and leaves the stored data alone.
-
-`docs/Extensibility.md` is the reference: every extension point has an executed
-example and a negative case.
+A fix to how a board, a ticket or a setting behaves is a `naf/board` change. Making it
+here produces an installation that silently differs from every other one, and the next
+update quietly puts it back.
 
 ## Running and checking
 
-Composer runs in the container, through `make composer` or `bin/dev-composer` — never on the host.
+    make first-install     prepare .env, build, install, migrate, seed, start
+    make run               start everything
+    make health            readiness: database, migrations, storage
+    make test              the suites
+    bin/style check        formatting, in the container
 
-```sh
-make first-install      # .env, certificates, image, dependencies, migrations, seed, start
-make test               # MariaDB, PostgreSQL, HTTP, profile, worker, AI and extensions
-make test-plugins       # installs both example packages, then boots the same database without them
-bin/style check         # PER Coding Style 3.0, JavaScript, CSS, Python
-make restart-background # after changes to worker or scheduler code
-```
+`naf/board` is not on Packagist yet, so a development install resolves it from a working
+copy mounted beside this project -- see `NAF_BOARD_ROOT` in `compose.yaml` and
+`bin/generate-dev-manifest.py`. `composer.json` itself stays clean of path
+repositories, because it describes a real installation.
 
-Both MariaDB and PostgreSQL have to pass; a change that works on only one is not finished.
-The runners refuse to start unless `APP_ENV=test` and `DB_DATABASE=nafinity_test`. The
-development database `nafinity` is never a test target and is never reset.
+## Never committed
 
-## Style
-
-PER Coding Style 3.0 with locally aligned `=` and `=>`, descriptive variable names and blank
-lines between logical steps; `.php-cs-fixer.dist.php` holds the exact rules. Keep SQL, mixed
-PHP/HTML templates and build scripts readable, and preserve escaping, form-value whitespace,
-evaluation order and transaction boundaries.
-
-## Operation
-
-Supervisor runs nginx, PHP-FPM, `naf queue:consume` and `naf schedule:ticker` together in the
-app container. Local HTTPS is port 443; `make certificates` generates the CA and certificate.
-Test and candidate services set `NAFINITY_BACKGROUND_ENABLED=false` explicitly. Configuration
-uses NAF's native `ENV:VARIABLE_NAME` references with defaults in Compose; do not duplicate
-this with `getenv()` in application configuration.
-
-## Never committed or baked into an image
-
-Secrets, `.env`, `vendor/`, generated development manifests and locks, TLS keys or
-certificates, private storage, logs, anything under `work/`.
-
-## Release gating
-
-Source mode may build against tested RC branches of the NAF packages. A stable distribution
-waits for the maintainer to merge and publish them. Never fake a stable alias. Merging and
-releasing is the maintainer's decision, not the agent's.
+`.env`, `app/vendor/`, `app/storage/` contents, `app/composer.dev.*`, certificates, and
+anything published into `app/public/plugins/` -- that directory is written by
+`naf nafinity:assets:publish` on install.
 
 ## Further reading
 
-| Document | Holds |
-|---|---|
-| `README.md` | Starting the application, demo accounts, ports, daily operation |
-| `docs/Extensibility.md` | The extension API in full, with examples |
-| `docs/Tickets.md` | Ticket behaviour, data model, limits |
-| `docs/Settings-And-AI.md` | Settings cards, custom roles, local Ollama |
-| `docs/Profile.md` | Account changes, verification codes, security boundaries |
-| `docs/Implementation.md` | What is delivered, what the last full run proved, what is missing |
-| `docs/Extensibility-Status.md` | Acceptance record of the extensibility work, honest about what is open |
-
-Anything dated in `docs/` is a record of a past run, not a description of the current state.
-Check the code or run the suite before repeating a number from it.
+The reference is at https://nafphp.github.io/docs/ and the release and contribution
+rules are in `nafphp/docs/AGENT_WORKFLOW.md`. A README here may point at that
+documentation; it must not duplicate it, and it must never carry release state.

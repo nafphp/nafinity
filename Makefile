@@ -24,7 +24,11 @@ help: ## Show available commands (the default)
 
 first-install: create-env-file install ## Prepare .env and install the complete local demo
 
-install: check-env-file certificates ## Build, install dependencies, migrate, seed and start all dev services
+storage-dirs: ## Create the runtime directories a fresh checkout does not carry
+	@mkdir -p app/storage/sessions app/storage/logs app/storage/attachments \
+		app/storage/queue app/storage/schedule app/storage/oauth
+
+install: check-env-file certificates storage-dirs ## Build, install dependencies, migrate, seed and start all dev services
 	@$(MAKE) build-app
 	@$(MAKE) composer-install
 	@$(COMPOSE) up -d --wait db
