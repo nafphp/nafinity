@@ -87,9 +87,28 @@ def build_host(folder, packages, order=None):
         elif target.is_dir():
             shutil.rmtree(target)
 
-    for name in ["src", "tests", "public"]:
+    # public/ is not among them: a package has no document root. The board's
+    # files live under src/Resources/public and are published into the host's,
+    # which is what the asset commands below actually exercise.
+    for name in ["src", "tests"]:
         shutil.copytree(board / name, host / name)
     (host / "bootstrap.php").write_text((board / "bootstrap.php").read_text())
+
+    # The entry point belongs to the host, not to the package: naf/board ships no
+    # public/index.php because an installation has its own.
+    #
+    # It runs the application here, which the skeleton's does not need to: there
+    # the host's own bootstrap ends with run(). This host copies the package's
+    # bootstrap instead of installing it, and that one deliberately does not run
+    # anything -- the CLI probes below load the very same file and would dispatch
+    # a request instead of reporting.
+    (host / "public").mkdir(parents=True, exist_ok=True)
+    (host / "public/index.php").write_text(
+        "<?php\n\ndeclare(strict_types=1);\n\n"
+        "use function Naf\\app;\n\n"
+        "require_once dirname(__DIR__) . '/bootstrap.php';\n\n"
+        "app()->run();\n"
+    )
 
     # This host stands in for an installation, so it brings the installation's
     # configuration. The board proposes none of its own -- everything the

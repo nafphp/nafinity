@@ -18,7 +18,7 @@ app/
     extensions.php   your last word on what the application offers
     Controllers/     your code, namespace Nafinity\
     views/           a template here wins over the board's
-  public/index.php   the entry point
+  public/index.php   the entry point; assets are published in beside it
   storage/           uploads, sessions, queue and scheduler state
 docker/, Makefile    how it runs locally
 ```
@@ -37,7 +37,11 @@ make first-install
 ```
 
 That writes a `.env` with local passwords, builds the image, installs dependencies,
-migrates, seeds a demo project and starts everything at https://localhost.
+migrates, publishes the stylesheets and scripts into `app/public/`, seeds a demo project
+and starts everything at https://localhost.
+
+Those stylesheets live inside `naf/board` and every plugin, so they are copied out rather
+than checked in. `make assets` repeats it after updating a package.
 
 `make help` lists the rest.
 

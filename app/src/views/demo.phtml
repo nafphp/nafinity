@@ -10,7 +10,14 @@
  * @var string $file
  */
 
+use function Naf\Board\template;
 use function Naf\View\s;
+
+// A page says which layout it sits in; the renderer supplies what that layout
+// needs but does not choose it. Without this line the page comes out as a bare
+// fragment with no navigation and no stylesheets -- which is what a partial
+// wants, and not what a page does.
+$this->setLayout(template('layout'));
 
 ?>
 <section class="panel">

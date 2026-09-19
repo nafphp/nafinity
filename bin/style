@@ -82,8 +82,8 @@ run(
     "node",
     required[1],
     "--check" if check else "--write",
-    "public/assets/**/*.js",
-    "public/assets/**/*.css",
+    "src/Resources/public/assets/**/*.js",
+    "src/Resources/public/assets/**/*.css",
     "tests/*.mjs",
     cwd=board,
 )

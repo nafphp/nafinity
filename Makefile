@@ -35,9 +35,13 @@ install: check-env-file certificates storage-dirs ## Build, install dependencies
 	@$(MAKE) composer-install
 	@$(COMPOSE) up -d --wait db
 	@$(MAKE) migrate
+	@$(MAKE) assets
 	@$(MAKE) seed
 	@$(MAKE) run
 	@$(MAKE) health
+
+assets: check-env-file ## Copy the stylesheets and scripts of naf/board and every plugin into public/
+	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf nafinity:assets:publish
 
 create-env-file: ## Create a private .env with random local passwords if missing
 	@python3 bin/init-env
