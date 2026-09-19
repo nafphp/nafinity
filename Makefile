@@ -24,14 +24,24 @@ help: ## Show available commands (the default)
 
 first-install: create-env-file install ## Prepare .env and install the complete local demo
 
-install: check-env-file certificates ## Build, install dependencies, migrate, seed and start all dev services
+storage-dirs: ## Create the runtime directories a fresh checkout does not carry
+	@mkdir -p app/storage/sessions app/storage/logs app/storage/attachments \
+		app/storage/queue app/storage/schedule app/storage/oauth
+	@mkdir -p .test-storage/sessions .test-storage/logs .test-storage/attachments \
+		.test-storage/queue .test-storage/schedule .test-storage/oauth
+
+install: check-env-file certificates storage-dirs ## Build, install dependencies, migrate, seed and start all dev services
 	@$(MAKE) build-app
 	@$(MAKE) composer-install
 	@$(COMPOSE) up -d --wait db
 	@$(MAKE) migrate
+	@$(MAKE) assets
 	@$(MAKE) seed
 	@$(MAKE) run
 	@$(MAKE) health
+
+assets: check-env-file ## Copy the stylesheets and scripts of naf/board and every plugin into public/
+	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf nafinity:assets:publish
 
 create-env-file: ## Create a private .env with random local passwords if missing
 	@python3 bin/init-env
@@ -105,9 +115,20 @@ health: check-env-file ## Check app readiness (database, migrations and storage)
 	@$(COMPOSE) exec -T app curl --fail --silent --show-error --cacert /etc/nginx/ssl/ca.pem https://localhost:8443/health/ready
 	@printf '\n'
 
+# The board is a dependency, and its suite belongs to it. It runs here because
+# this is where a container is: the tests boot this installation and reach the
+# board through it, which is also what a person gets. BOARD is the working copy
+# beside this project; inside the container it is mounted at /workspace/board.
+BOARD ?= ../board
+BOARD_IN_CONTAINER = /workspace/board
+BOARD_TEST = -e NAF_HOST=/workspace/app
+# The host serves the certificate and holds docker/; the board ships neither.
+BOARD_HOST_ENV = NAF_HOST_CA=$(CURDIR)/docker/rootfs/etc/nginx/ssl/ca.pem \
+	NAF_HOST_ROOT=$(CURDIR)
+
 test: test-http test-profile test-postgres test-worker test-ai test-plugins ## Run MariaDB, PostgreSQL, HTTP, worker and extension checks in disposable databases
 
-test-up: config-check certificates ## Prepare nafinity_test and start the isolated test services
+test-up: config-check certificates storage-dirs ## Prepare nafinity_test and start the isolated test services
 	@$(COMPOSE) up -d --wait db
 	@bin/prepare-test-database
 	@$(COMPOSE) --profile test up -d app-test postgres
@@ -118,24 +139,24 @@ test-down: check-env-file ## Stop test services, preserving the development envi
 	@$(COMPOSE) --profile test stop app-test postgres
 
 test-mariadb: test-up ## Reset and check only the MariaDB nafinity_test schema
-	@$(COMPOSE) exec -T app-test php tests/run.php
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test php $(BOARD_IN_CONTAINER)/tests/run.php
 
 test-postgres: test-up ## Reset and check only the PostgreSQL nafinity_test schema
-	@$(COMPOSE) exec -T -e DB_DRIVER=pgsql -e DB_HOST=postgres -e DB_PORT=5432 app-test php tests/run.php
+	@$(COMPOSE) exec -T $(BOARD_TEST) -e DB_DRIVER=pgsql -e DB_HOST=postgres -e DB_PORT=5432 app-test php $(BOARD_IN_CONTAINER)/tests/run.php
 
 test-http: test-mariadb ## Reset test fixtures and check HTTP, permissions and private files
 	@$(COMPOSE) exec -T app-test php vendor/bin/naf nafinity:seed
-	@python3 app/tests/http_acceptance.py
+	@$(BOARD_HOST_ENV) python3 $(BOARD)/tests/http_acceptance.py
 
 test-profile: test-up ## Check password/email changes, SMTP delivery and session revocation over HTTPS
-	@python3 app/tests/profile_http.py
+	@$(BOARD_HOST_ENV) python3 $(BOARD)/tests/profile_http.py
 
 test-worker: test-up ## Check worker termination, lease recovery and dead letters
-	@$(COMPOSE) exec -T app-test php tests/queue_process.php
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test php $(BOARD_IN_CONTAINER)/tests/queue_process.php
 
 test-ai: ## Check local AI streaming transport and browser storage boundaries
-	@node app/tests/ai_transport.mjs
-	@node app/tests/ai_routing.mjs
+	@node $(BOARD)/tests/ai_transport.mjs
+	@node $(BOARD)/tests/ai_routing.mjs
 
 test-plugins: test-up ## Boot Nafinity with and without both example extensions
 	@python3 bin/check-extensions

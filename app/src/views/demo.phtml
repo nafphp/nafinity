@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * A template of this installation's own.
+ *
+ * It lives in src/views/, which wins over a template of the same name in
+ * naf/board -- copy one of theirs here to change it, keeping the path.
+ *
+ * @var string $heading
+ * @var string $file
+ */
+
+use function Naf\Board\template;
+use function Naf\View\s;
+
+// A page says which layout it sits in; the renderer supplies what that layout
+// needs but does not choose it. Without this line the page comes out as a bare
+// fragment with no navigation and no stylesheets -- which is what a partial
+// wants, and not what a page does.
+$this->setLayout(template('layout'));
+
+?>
+<section class="panel">
+    <h1><?= s($heading) ?></h1>
+    <p>
+        This page is served by your own controller, rendered inside the
+        application shell. It comes from <code><?= s($file) ?></code>.
+    </p>
+</section>

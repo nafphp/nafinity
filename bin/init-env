@@ -6,16 +6,36 @@ import secrets
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-environment = root / ".env"
+
+
+def create(target, contents, made, kept):
+    """Write a file only if it is not there, and never overwrite local settings."""
+    try:
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        print(kept)
+    else:
+        with os.fdopen(descriptor, "w") as output:
+            output.write(contents)
+        print(made)
+
+
+# The project environment: what Compose needs to bring the services up.
 template = (root / ".env.example").read_text()
 template = template.replace("replace-with-a-local-password", secrets.token_hex(24))
 template = template.replace("replace-with-a-different-local-password", secrets.token_hex(24))
+create(
+    root / ".env",
+    template,
+    "Created private .env with random database passwords for local development.",
+    "Existing .env retained.",
+)
 
-try:
-    descriptor = os.open(environment, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-except FileExistsError:
-    print("Existing .env retained.")
-else:
-    with os.fdopen(descriptor, "w") as output:
-        output.write(template)
-    print("Created private .env with random database passwords for local development.")
+# The application environment, which NAF reads from BASE_PATH. Compose still wins
+# over it, so this is what matters where there is no Compose.
+create(
+    root / "app/.env",
+    (root / "app/.env.example").read_text(),
+    "Created app/.env for the application itself.",
+    "Existing app/.env retained.",
+)

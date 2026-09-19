@@ -6,6 +6,10 @@
 /app/composer.dev.lock
 /app/.phpunit.cache/
 /app/storage/*
+# Written by `make assets`: naf/board's own stylesheets and scripts at the
+# document root, and every plugin's under its own name. All copies of files
+# that live in their packages.
+/app/public/assets/
 /app/public/plugins/
 !/app/storage/.gitkeep
 /work/
