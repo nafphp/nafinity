@@ -11,7 +11,7 @@ BACKUP       ?=
 
 # Installations and database checks must also run in order with make -j.
 .NOTPARALLEL:
-.PHONY: help first-install install create-env-file check-env-file config-check \
+.PHONY: certificates-shared help first-install install create-env-file check-env-file config-check \
         build-app run up stop down restart restart-background status logs ssh shell \
         composer composer-install composer-update naf migrate seed health \
         test test-up test-down test-mariadb test-postgres test-http test-profile test-worker test-ai \
@@ -49,8 +49,26 @@ create-env-file: ## Create a private .env with random local passwords if missing
 check-env-file:
 	@test -f .env || { echo 'Run make first-install, or copy .env.example and set both passwords.' >&2; exit 2; }
 
-certificates: ## Generate or renew the local CA and HTTPS certificate
-	@python3 bin/generate-certificates
+# A certificate authority kept outside every project, so it survives a
+# restructuring of this one and a machine only has to trust it once.
+CERT_AUTHORITY ?= ../cert-authority
+
+certificates: ## Issue the HTTPS certificate, from $(CERT_AUTHORITY) when it is there
+	@if [ -f "$(CERT_AUTHORITY)/ca/ca-key.pem" ]; then \
+		$(MAKE) --no-print-directory certificates-shared; \
+	else \
+		python3 bin/generate-certificates; \
+	fi
+
+certificates-shared:
+	@if python3 bin/certificate-is-current "$(CERT_AUTHORITY)/ca/ca.pem"; then \
+		echo "Existing certificate from $(CERT_AUTHORITY) retained."; \
+	else \
+		$(MAKE) -C "$(CERT_AUTHORITY)" --no-print-directory cert HOST=localhost; \
+		$(MAKE) -C "$(CERT_AUTHORITY)" --no-print-directory install HOST=localhost \
+			TO="$(CURDIR)/docker/rootfs/etc/nginx/ssl"; \
+		echo "Reissued from $(CERT_AUTHORITY); restart the services to serve it."; \
+	fi
 
 config-check: check-env-file ## Validate Compose without printing secrets
 	@$(COMPOSE) config --quiet

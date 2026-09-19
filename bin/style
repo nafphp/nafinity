@@ -12,6 +12,10 @@ root = Path(__file__).resolve().parents[1]
 # container of its own. This is the container, so both are formatted from here --
 # the host's own files and the package it installs.
 board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
+# Not /workspace/board: compose mounts the package there read-only, which is
+# right for serving it and wrong for a formatter. A path of its own is
+# writable, and the package's config resolves through __DIR__ either way.
+BOARD_IN_CONTAINER = "/workspace/format-board"
 tooling = root / "tools/style"
 php_tools = "/workspace/project/tools/style/php"
 web_tools = tooling / "web"
@@ -33,7 +37,7 @@ def container(*command):
         "--volume",
         f"{root}:/workspace/project",
         "--volume",
-        f"{board.resolve()}:/workspace/board",
+        f"{board.resolve()}:{BOARD_IN_CONTAINER}",
         "app",
         *command,
     )
@@ -64,7 +68,7 @@ check = args.action == "check"
 php_options = ["--dry-run", "--diff"] if check else []
 for config in (
     "/workspace/project/.php-cs-fixer.dist.php",
-    "/workspace/board/.php-cs-fixer.dist.php",
+    f"{BOARD_IN_CONTAINER}/.php-cs-fixer.dist.php",
 ):
     container(
         "php",
