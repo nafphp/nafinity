@@ -1,4 +1,4 @@
-name: nafinity-skeleton
+name: nafinity
 x-runtime: &runtime
   image: nafinity:dev
   build:
