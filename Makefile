@@ -115,7 +115,7 @@ health: check-env-file ## Check app readiness (database, migrations and storage)
 # this is where a container is: the tests boot this installation and reach the
 # board through it, which is also what a person gets. BOARD is the working copy
 # beside this project; inside the container it is mounted at /workspace/board.
-BOARD ?= ../nafinity
+BOARD ?= ../board
 BOARD_IN_CONTAINER = /workspace/board
 BOARD_TEST = -e NAF_HOST=/workspace/app
 # The host serves the certificate and holds docker/; the board ships neither.

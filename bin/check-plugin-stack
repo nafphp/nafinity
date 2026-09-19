@@ -8,7 +8,7 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 # The board is a dependency here, not this repository. In development it is a
 # working copy mounted beside the project; installed it sits in vendor.
-board = Path(os.environ.get("BOARD_ROOT", root.parent / "nafinity"))
+board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
 lab = root / "work/plugin-lab"
 requirements = json.loads((board / "composer.json").read_text())["require"]
 stacks = {

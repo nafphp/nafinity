@@ -2,11 +2,16 @@
 """Install, check or apply the project's pinned development formatters."""
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
+# The board is a dependency with its own code, its own style configuration and no
+# container of its own. This is the container, so both are formatted from here --
+# the host's own files and the package it installs.
+board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
 tooling = root / "tools/style"
 php_tools = "/workspace/project/tools/style/php"
 web_tools = tooling / "web"
@@ -14,8 +19,8 @@ python_tools = tooling / "python"
 python = python_tools / ".venv/bin/python"
 
 
-def run(*command):
-    subprocess.run([str(argument) for argument in command], cwd=root, check=True)
+def run(*command, cwd=None):
+    subprocess.run([str(argument) for argument in command], cwd=cwd or root, check=True)
 
 
 def container(*command):
@@ -27,6 +32,8 @@ def container(*command):
         "--no-deps",
         "--volume",
         f"{root}:/workspace/project",
+        "--volume",
+        f"{board.resolve()}:/workspace/board",
         "app",
         *command,
     )
@@ -55,25 +62,33 @@ if not all(path.exists() for path in required):
 
 check = args.action == "check"
 php_options = ["--dry-run", "--diff"] if check else []
-container(
-    "php",
-    f"{php_tools}/vendor/bin/php-cs-fixer",
-    "fix",
-    "--config=/workspace/project/.php-cs-fixer.dist.php",
-    "--sequential",
-    "--show-progress=none",
-    *php_options,
-)
+for config in (
+    "/workspace/project/.php-cs-fixer.dist.php",
+    "/workspace/board/.php-cs-fixer.dist.php",
+):
+    container(
+        "php",
+        f"{php_tools}/vendor/bin/php-cs-fixer",
+        "fix",
+        f"--config={config}",
+        "--sequential",
+        "--show-progress=none",
+        *php_options,
+    )
+# From the package's own directory, so its .prettierignore applies. It excludes
+# the vendored libraries under public/assets/vendor, and an ignore file only ever
+# matches paths relative to where the formatter runs.
 run(
     "node",
     required[1],
     "--check" if check else "--write",
-    "app/public/assets/**/*.js",
-    "app/public/assets/**/*.css",
-    "app/tests/*.mjs",
+    "public/assets/**/*.js",
+    "public/assets/**/*.css",
+    "tests/*.mjs",
+    cwd=board,
 )
 
-python_files = sorted((root / "app/tests").glob("*.py"))
+python_files = sorted((board / "tests").glob("*.py"))
 python_files += sorted(
     path
     for path in (root / "bin").iterdir()

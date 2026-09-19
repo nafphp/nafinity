@@ -19,7 +19,7 @@ import sys
 root = Path(__file__).resolve().parents[1]
 # The board is a dependency here, not this repository. In development it is a
 # working copy mounted beside the project; installed it sits in vendor.
-board = Path(os.environ.get("BOARD_ROOT", root.parent / "nafinity"))
+board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
 manifest = json.loads((board / "composer.json").read_text())
 examples = ["example/nafinity-extension-a", "example/nafinity-extension-b"]
 
@@ -66,6 +66,10 @@ def build_host(folder, packages, order=None):
 
     host.mkdir(parents=True, exist_ok=True)
     (host / "composer.json").write_text(json.dumps(config, indent=2) + "\n")
+    # The manifest is rewritten every run, so a lock from an earlier one can only
+    # disagree with it -- and Composer installs from the lock, so the
+    # disagreement wins silently. A path that moved is how this shows up.
+    (host / "composer.lock").unlink(missing_ok=True)
     (host / "storage").mkdir(exist_ok=True)
     (host / "logs").mkdir(exist_ok=True)
     # The application's own source is copied rather than linked. A symlink would
@@ -86,6 +90,11 @@ def build_host(folder, packages, order=None):
     for name in ["src", "tests", "public"]:
         shutil.copytree(board / name, host / name)
     (host / "bootstrap.php").write_text((board / "bootstrap.php").read_text())
+
+    # This host stands in for an installation, so it brings the installation's
+    # configuration. The board proposes none of its own -- everything the
+    # application runs on lives in the skeleton, which is the point.
+    (host / "src/config.php").write_text((root / "app/src/config.php").read_text())
 
     return host
 

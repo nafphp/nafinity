@@ -22,7 +22,7 @@ x-runtime: &runtime
     - ${NAF_SOURCE_ROOT:-../nafphp}:/workspace/packages:ro
     # naf/board is not published yet, so a development install resolves it
     # from a working copy. Drop this once it is on Packagist.
-    - ${NAF_BOARD_ROOT:-../nafinity}:/workspace/board:ro
+    - ${NAF_BOARD_ROOT:-../board}:/workspace/board:ro
     - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
   init: true
   logging:
@@ -69,7 +69,7 @@ services:
       - ${NAF_SOURCE_ROOT:-../nafphp}:/workspace/packages:ro
       # naf/board is not published yet, so a development install resolves it
       # from a working copy. Drop this once it is on Packagist.
-      - ${NAF_BOARD_ROOT:-../nafinity}:/workspace/board:ro
+      - ${NAF_BOARD_ROOT:-../board}:/workspace/board:ro
       - ./.test-storage:/workspace/app/storage
       - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
