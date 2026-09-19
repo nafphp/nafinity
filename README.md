@@ -10,10 +10,14 @@ the product does lives in `naf/board`, and everything you decide lives here.
 app/
   composer.json      what your installation requires
   bootstrap.php      nine lines: autoload, BASE_PATH, run
+  .env               the application's own environment
   src/
+    config.php       everything the application runs on, in one file
+    routes.php       routes you add; a path here wins over the board's
     plugins.php      the order plugins boot in
     extensions.php   your last word on what the application offers
-    views/           drop a template here to override the board's
+    Controllers/     your code, namespace Nafinity\
+    views/           a template here wins over the board's
   public/index.php   the entry point
   storage/           uploads, sessions, queue and scheduler state
 docker/, Makefile    how it runs locally
@@ -21,6 +25,10 @@ docker/, Makefile    how it runs locally
 
 There is deliberately almost nothing here. A fresh installation shows a complete
 application, and none of it is a file you could break by editing.
+
+The one exception is `/demo`: a controller, a route and a template of your own, so you can
+see your code run before writing any. Sign in and open it, then delete the three files —
+nothing else refers to them.
 
 ## Getting started
 

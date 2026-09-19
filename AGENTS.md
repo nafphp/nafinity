@@ -8,6 +8,9 @@ in `naf/board` and arrives through Composer. If a change belongs to how Nafinity
 
     app/composer.json      what this installation requires
     app/bootstrap.php      autoload, BASE_PATH, run -- and nothing else
+    app/.env               the application's own environment; Compose still wins over it
+    app/src/config.php     everything the application runs on; naf/board proposes nothing
+    app/src/routes.php     routes this installation adds, loaded after every plugin
     app/src/               the owner's code, namespace Nafinity\
     app/src/plugins.php    boot order; naf/board is pinned first on purpose
     app/src/extensions.php optional, runs last, may replace or remove anything

@@ -7,7 +7,9 @@ x-runtime: &runtime
     target: development
   working_dir: /workspace/app
   environment: &environment
-    APP_ENV: dev
+    # APP_ENV deliberately absent: the application reads it from app/.env, which
+    # is the file someone can edit. NAF's dotenv only fills gaps, so the test and
+    # candidate services below still win by setting it explicitly.
     APP_URL: https://localhost:${NAFINITY_HTTPS_PORT:-443}
     NAFINITY_BACKGROUND_ENABLED: "true"
     NAFINITY_MAIL_FROM: ${NAFINITY_MAIL_FROM:-notifications@example.test}
