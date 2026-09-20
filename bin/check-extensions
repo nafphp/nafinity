@@ -1,273 +1,238 @@
-#!/usr/bin/env python3
-"""Boot the real Nafinity application with, and then without, both example extensions.
+#!/usr/bin/env node
+/**
+ * Boot the real Nafinity application with, and then without, both example
+ * extensions.
+ *
+ * The extensions are installed as ordinary Composer packages from local path
+ * repositories into throwaway hosts that share Nafinity's own source. The
+ * development installation is never touched and nothing here reaches a package
+ * registry: this proves discovery, boot and uninstall, not distribution.
+ *
+ * The phases run in order and each reads what the one before it left behind --
+ * the host without the extensions is asked about rows the host with them wrote,
+ * because what people stored has to survive the package going away.
+ */
+import { execFileSync } from 'node:child_process';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-The extensions are installed as ordinary Composer packages from local path
-repositories into throwaway hosts that share Nafinity's own source. The
-development installation is never touched and nothing here reaches a package
-registry: this proves discovery, boot and uninstall, not distribution.
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+// The board is a dependency here, not this repository. In development it is a
+// working copy mounted beside the project; installed it sits in vendor.
+const board = process.env.BOARD_ROOT ?? join(root, '../nafphp/board');
+const manifest = JSON.parse(readFileSync(join(board, 'composer.json'), 'utf8'));
+const examples = ['example/nafinity-extension-a', 'example/nafinity-extension-b'];
 
-The second phase runs against the database the first phase left behind, which is
-the whole point of it: what people stored has to survive the package going away.
-"""
-from pathlib import Path
-import os
-import json
-import shutil
-import subprocess
-import sys
+/** Write a disposable host that shares Nafinity's source and installs packages. */
+function buildHost(folder, packages) {
+  const host = join(root, 'work', folder);
+  const config = {
+    name: `local/nafinity-${folder}`,
+    description: 'Disposable host for the Nafinity extension checks',
+    type: 'project',
+    license: 'proprietary',
+    require: { ...manifest.require },
+    // A root package's require-dev is installed, which is what lets the suite
+    // run against this host's autoloader rather than the development one's --
+    // the very thing these checks are about.
+    'require-dev': { 'phpunit/phpunit': '^12.1' },
+    autoload: manifest.autoload,
+    config: { 'allow-plugins': false },
+    'minimum-stability': 'dev',
+    'prefer-stable': true,
+    repositories: [],
+  };
 
-root = Path(__file__).resolve().parents[1]
-# The board is a dependency here, not this repository. In development it is a
-# working copy mounted beside the project; installed it sits in vendor.
-board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
-manifest = json.loads((board / "composer.json").read_text())
-examples = ["example/nafinity-extension-a", "example/nafinity-extension-b"]
+  for (const [composerPackage, constraint] of Object.entries(manifest.require)) {
+    if (!composerPackage.startsWith('naf/')) continue;
+    const name = composerPackage.split('/')[1];
+    config.repositories.push({
+      type: 'path',
+      // Three levels up from work/<host> is the directory the checkouts sit in:
+      // /var in the container, PhpstormProjects out here. The same text
+      // has to mean the same packages on both sides, and this is the one
+      // spelling that does without a symlink in the project to help it along.
+      url: `../../../nafphp/${name}`,
+      options: {
+        symlink: true,
+        versions: { [composerPackage]: `${constraint.replace(/^\^/, '')}-dev` },
+      },
+    });
+  }
 
+  for (const composerPackage of packages) {
+    config.repositories.push({
+      type: 'path',
+      // Written for the container rather than for this machine: compose mounts
+      // the board at /var/board wherever the working copy on this machine
+      // happens to live, and the host that reads this path only ever exists in
+      // there. Three levels up from work/<host> is /var.
+      url: `../../../board/examples/${composerPackage.split('/')[1]}`,
+      options: { symlink: true, versions: { [composerPackage]: '1.0.0' } },
+    });
+    config.require[composerPackage] = '^1.0';
+  }
 
-def build_host(folder, packages, order=None):
-    """Write a disposable host that shares Nafinity's source and installs packages."""
-    host = root / "work" / folder
-    config = {
-        "name": "local/nafinity-" + folder,
-        "description": "Disposable host for the Nafinity extension checks",
-        "type": "project",
-        "license": "proprietary",
-        "require": dict(manifest["require"]),
-        "autoload": manifest["autoload"],
-        "config": {"allow-plugins": False},
-        "minimum-stability": "dev",
-        "prefer-stable": True,
-        "repositories": [],
-    }
-    for package, constraint in manifest["require"].items():
-        if not package.startswith("naf/"):
-            continue
-        name = package.split("/")[1]
-        config["repositories"].append(
-            {
-                "type": "path",
-                "url": "../../packages/" + name,
-                "options": {
-                    "symlink": True,
-                    "versions": {package: constraint.lstrip("^") + "-dev"},
-                },
-            }
-        )
-    for package in packages:
-        folder_name = package.split("/")[1]
-        config["repositories"].append(
-            {
-                "type": "path",
-                "url": os.path.relpath(board / "examples" / folder_name, root / "work" / "x"),
-                "options": {"symlink": True, "versions": {package: "1.0.0"}},
-            }
-        )
-        config["require"][package] = "^1.0"
+  mkdirSync(host, { recursive: true });
+  writeFileSync(join(host, 'composer.json'), `${JSON.stringify(config, null, 2)}\n`);
 
-    host.mkdir(parents=True, exist_ok=True)
-    (host / "composer.json").write_text(json.dumps(config, indent=2) + "\n")
-    # The manifest is rewritten every run, so a lock from an earlier one can only
-    # disagree with it -- and Composer installs from the lock, so the
-    # disagreement wins silently. A path that moved is how this shows up.
-    (host / "composer.lock").unlink(missing_ok=True)
-    (host / "storage").mkdir(exist_ok=True)
-    (host / "logs").mkdir(exist_ok=True)
-    # The application's own source is copied rather than linked. A symlink would
-    # be cheaper, but PHP resolves __DIR__ through one — a linked bootstrap.php
-    # would define BASE_PATH as the development installation and load its vendor
-    # — and a host of real files can also be packaged into an image later.
-    # Clear every directory this function has ever owned before copying, not
-    # only the ones it writes today. A host is reused between runs, so a copy
-    # left by an earlier layout survives otherwise -- and a stale app/Migrations
-    # beside a fresh src/Migrations is two files claiming one migration class.
-    for name in ["app", "src", "tests", "public"]:
-        target = host / name
-        if target.is_symlink():
-            target.unlink()
-        elif target.is_dir():
-            shutil.rmtree(target)
+  // The manifest is rewritten every run, so a lock from an earlier one can only
+  // disagree with it -- and Composer installs from the lock, so the disagreement
+  // wins silently. A path that moved is how this shows up.
+  rmSync(join(host, 'composer.lock'), { force: true });
 
-    # public/ is not among them: a package has no document root. The board's
-    # files live under src/Resources/public and are published into the host's,
-    # which is what the asset commands below actually exercise.
-    for name in ["src", "tests"]:
-        shutil.copytree(board / name, host / name)
-    (host / "bootstrap.php").write_text((board / "bootstrap.php").read_text())
+  // The same runtime directories `make storage-dirs` gives a real installation.
+  // Without them the host is subtly not an installation: background work that
+  // writes a heartbeat or a lock fails, quietly, in a way nothing else would.
+  for (const runtime of ['sessions', 'logs', 'attachments', 'queue', 'schedule', 'oauth']) {
+    mkdirSync(join(host, 'storage', runtime), { recursive: true });
+  }
+  mkdirSync(join(host, 'logs'), { recursive: true });
 
-    # The entry point belongs to the host, not to the package: naf/board ships no
-    # public/index.php because an installation has its own.
-    #
-    # It runs the application here, which the skeleton's does not need to: there
-    # the host's own bootstrap ends with run(). This host copies the package's
-    # bootstrap instead of installing it, and that one deliberately does not run
-    # anything -- the CLI probes below load the very same file and would dispatch
-    # a request instead of reporting.
-    (host / "public").mkdir(parents=True, exist_ok=True)
-    (host / "public/index.php").write_text(
-        "<?php\n\ndeclare(strict_types=1);\n\n"
-        "use function Naf\\app;\n\n"
-        "require_once dirname(__DIR__) . '/bootstrap.php';\n\n"
-        "app()->run();\n"
-    )
+  // Clear every directory this function has ever owned before copying, not only
+  // the ones it writes today. A host is reused between runs, so a copy left by
+  // an earlier layout survives otherwise -- and a stale app/Migrations beside a
+  // fresh src/Migrations is two files claiming one migration class.
+  for (const name of ['app', 'src', 'tests', 'public']) {
+    const target = join(host, name);
+    if (existsSync(target) && lstatSync(target).isSymbolicLink()) unlinkSync(target);
+    else rmSync(target, { recursive: true, force: true });
+  }
 
-    # This host stands in for an installation, so it brings the installation's
-    # configuration. The board proposes none of its own -- everything the
-    # application runs on lives in the skeleton, which is the point.
-    (host / "src/config.php").write_text((root / "app/src/config.php").read_text())
+  // The application's own source is copied rather than linked. A symlink would
+  // be cheaper, but PHP resolves __DIR__ through one -- a linked bootstrap.php
+  // would define BASE_PATH as the development installation and load its vendor
+  // -- and a host of real files can also be packaged into an image later.
+  //
+  // public/ is not among them: a package has no document root. The board's files
+  // live under src/Resources/public and are published into the host's, which is
+  // what the asset commands below actually exercise.
+  for (const name of ['src', 'tests']) {
+    cpSync(join(board, name), join(host, name), { recursive: true });
+  }
+  writeFileSync(join(host, 'bootstrap.php'), readFileSync(join(board, 'bootstrap.php')));
 
-    return host
+  // The entry point belongs to the host, not to the package: naf/board ships no
+  // public/index.php because an installation has its own.
+  //
+  // It runs the application here, which the skeleton's does not need to: there
+  // the host's own bootstrap ends with run(). This host copies the package's
+  // bootstrap instead of installing it, and that one deliberately does not run
+  // anything -- the CLI probes load the very same file and would dispatch a
+  // request instead of reporting.
+  mkdirSync(join(host, 'public'), { recursive: true });
+  writeFileSync(
+    join(host, 'public/index.php'),
+    "<?php\n\ndeclare(strict_types=1);\n\nuse function Naf\\app;\n\n"
+    + "require_once dirname(__DIR__) . '/bootstrap.php';\n\napp()->run();\n",
+  );
 
+  // This host stands in for an installation, so it brings the installation's
+  // configuration. The board proposes none of its own -- everything the
+  // application runs on lives in the skeleton, which is the point.
+  writeFileSync(join(host, 'src/config.php'), readFileSync(join(root, 'app/src/config.php')));
 
-def run(host, steps):
-    completed = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "--profile",
-            "test",
-            "run",
-            "--rm",
-            "-T",
-            # The project is mounted where its own relative paths already point,
-            # so a host directory looks the same from inside the container and
-            # from this machine. An absolute container path in a repository would
-            # leave a vendor directory only the container could read, and the
-            # candidate build could never package it.
-            "--volume",
-            str(root) + ":/workspace/project",
-            "--volume",
-            str((root / "packages").resolve()) + ":/workspace/nafphp:ro",
-            # The board sits beside the project, and its examples are reached by a
-            # relative path for the same reason the packages are: mounting it under
-            # its own directory name makes that path mean the same thing here and
-            # inside the container.
-            "--volume",
-            str(board.resolve()) + ":/workspace/" + board.resolve().name + ":ro",
-            "--workdir",
-            "/workspace/project/" + host.relative_to(root).as_posix(),
-            "--env",
-            "COMPOSER=composer.json",
-            "--env",
-            "NAFINITY_BOOTSTRAP=/workspace/project/"
-            + host.relative_to(root).as_posix()
-            + "/bootstrap.php",
-            "app-test",
-            "sh",
-            "-c",
-            "set -e\n" + "\n".join(steps),
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-    )
-    output = completed.stdout.strip()
-    # A probe that reports failures still reports them as JSON; only a run that
-    # produced no result at all is a reason to stop, because then the later
-    # phases — including the cleanup — have nothing to work with.
-    if "{" not in output:
-        sys.stderr.write(output + "\n" + completed.stderr)
-        for log in ["install.log", "migrate.log"]:
-            file = host / log
-            if file.is_file():
-                sys.stderr.write("\n--- " + log + " ---\n" + file.read_text()[-2000:])
-        sys.exit(completed.returncode or 1)
-
-    return json.loads(output[output.index("{") :])
-
-
-installed = build_host("extension-host", examples)
-with_extensions = run(
-    installed,
-    [
-        "composer install --no-interaction --no-progress > install.log 2>&1",
-        "php vendor/bin/naf db:migrate up > migrate.log 2>&1",
-        "php tests/extensions.php",
-    ],
-)
-
-# The same host over real HTTP, with the fixtures the probe just created.
-over_http = run(
-    installed,
-    [
-        # The built-in server is stopped again, so the container run can end.
-        "php -S 127.0.0.1:8099 -t public public/index.php > server.log 2>&1 &",
-        "server=$!",
-        "sleep 1",
-        "set +e",
-        "php tests/extensions_http.php",
-        "status=$?",
-        "kill $server 2>/dev/null",
-        "exit $status",
-    ],
-)
-
-# The same two packages, listed the other way round. NAF boots plugins in the
-# order the application lists them, so this proves the provider order comes from
-# the index and the id rather than from whatever Composer happened to write down.
-(installed / "src/plugins.php").write_text(
-    "<?php\n\ndeclare(strict_types=1);\n\n"
-    "// Deliberately the wrong way round, to show it does not matter.\n"
-    "return ['example/nafinity-extension-b', 'example/nafinity-extension-a'];\n"
-)
-swapped = run(installed, ["php tests/extensions_order.php"])
-(installed / "src/plugins.php").unlink()
-
-# Publishing a package's public files, through the same class the CLI commands
-# use, and then the commands themselves so their wiring is proven too.
-assets = run(
-    installed,
-    [
-        "php tests/extensions_assets.php",
-    ],
-)
-run(
-    installed,
-    [
-        "php vendor/bin/naf nafinity:assets:publish > assets-publish.log 2>&1",
-        "php vendor/bin/naf nafinity:assets:check > assets-check.log 2>&1",
-        "php vendor/bin/naf nafinity:assets:remove > assets-remove.log 2>&1",
-        "echo '{}'",
-    ],
-)
-
-# The same database, now without the packages: nothing is migrated down, because
-# uninstalling a package does not delete what people stored with it.
-removed = build_host("extension-host-without", [])
-without_extensions = run(
-    removed,
-    [
-        "composer install --no-interaction --no-progress > install.log 2>&1",
-        "php tests/extensions_without.php",
-    ],
-)
-
-# The disposable database now records a migration whose source only exists while
-# the package is installed, so the schema is rolled back here rather than left
-# for the next suite to trip over.
-run(installed, ["php vendor/bin/naf db:migrate down > migrate-down.log 2>&1", "echo '{}'"])
-
-evidence = {
-    "with_extensions": with_extensions,
-    "over_http": over_http,
-    "swapped_listing": swapped,
-    "assets": assets,
-    "without_extensions": without_extensions,
-    "passed": with_extensions["passed"]
-    + over_http["passed"]
-    + swapped["passed"]
-    + assets["passed"]
-    + without_extensions["passed"],
-    "failed": with_extensions["failed"]
-    + over_http["failed"]
-    + swapped["failed"]
-    + assets["failed"]
-    + without_extensions["failed"],
+  return host;
 }
-print(json.dumps(evidence, indent=2, ensure_ascii=False))
-# Generated output belongs in work/, which is ignored: a committed snapshot of a
-# past run goes stale the moment the next one differs, and documentation that
-# quotes it inherits that staleness.
-(root / "work" / "extension-evidence.json").write_text(
-    json.dumps(evidence, indent=2, ensure_ascii=False) + "\n"
-)
-sys.exit(1 if evidence["failed"] else 0)
+
+/**
+ * Run shell steps inside the host, in the container that is already up.
+ *
+ * Throws when they fail, which is what attempt() below turns into a count.
+ */
+function run(host, steps) {
+  const inside = `/var/project/${host.slice(root.length + 1)}`;
+
+  execFileSync(
+    'docker',
+    [
+      'compose', '--profile', 'test',
+      // Into the test container that is already up, not a new one. Each of these
+      // steps used to create and start a container of its own, which was the
+      // most expensive thing in the whole suite -- and none of them needs an
+      // environment the running container does not already have. What they do
+      // need is mounted there; see compose.yaml.
+      'exec', '-T',
+      '--workdir', inside,
+      '--env', 'COMPOSER=composer.json',
+      '--env', `NAFINITY_BOOTSTRAP=${inside}/bootstrap.php`,
+      'app-test', 'sh', '-c', `set -e\n${steps.join('\n')}`,
+    ],
+    { cwd: root, stdio: 'inherit' },
+  );
+}
+
+/** The same, but counting a failure instead of stopping on one. */
+function attempt(host, steps) {
+  try {
+    run(host, steps);
+
+    return 0;
+  } catch {
+    return 1;
+  }
+}
+
+/** Run one PHPUnit suite in a host, with anything it needs started first. */
+const suite = (host, name, steps = []) =>
+  attempt(host, [...steps, `php vendor/bin/phpunit -c tests/extensions.xml --testsuite ${name}`]);
+
+// Non-zero once any suite has failed; every phase still runs, because a later
+// one often explains an earlier one.
+let failures = 0;
+
+const installed = buildHost('extension-host', examples);
+
+failures += suite(installed, 'Extensions', [
+  'composer install --no-interaction --no-progress > install.log 2>&1',
+  'php vendor/bin/naf db:migrate up > migrate.log 2>&1',
+  // The roles the packages declare. Migrating builds the tables; this fills the
+  // ones that are reference data, and without them nobody in this host may do
+  // anything -- which shows up as an empty project rather than as a missing role.
+  'php vendor/bin/naf rbac:sync > rbac-sync.log 2>&1',
+]);
+
+// The same host over real HTTP, with the fixtures the phase before created.
+failures += suite(installed, 'ExtensionsHttp', [
+  // The built-in server, stopped again afterwards so the shell can end.
+  'php -S 127.0.0.1:8099 -t public public/index.php > server.log 2>&1 &',
+  'server=$!',
+  'sleep 1',
+  "trap 'kill $server 2>/dev/null' EXIT",
+]);
+
+// The same two packages, listed the other way round. NAF boots plugins in the
+// order the application lists them, so this proves the provider order comes from
+// the index and the id rather than from whatever Composer happened to write down.
+writeFileSync(
+  join(installed, 'src/plugins.php'),
+  "<?php\n\ndeclare(strict_types=1);\n\n"
+  + "// Deliberately the wrong way round, to show it does not matter.\n"
+  + "return ['example/nafinity-extension-b', 'example/nafinity-extension-a'];\n",
+);
+failures += suite(installed, 'ExtensionsOrder');
+rmSync(join(installed, 'src/plugins.php'), { force: true });
+
+// Publishing a package's public files, through the same class the CLI commands
+// use, and then the commands themselves so their wiring is proven too.
+failures += suite(installed, 'ExtensionsAssets');
+failures += attempt(installed, [
+  'php vendor/bin/naf nafinity:assets:publish > assets-publish.log 2>&1',
+  'php vendor/bin/naf nafinity:assets:check > assets-check.log 2>&1',
+  'php vendor/bin/naf nafinity:assets:remove > assets-remove.log 2>&1',
+]);
+
+// The same database, now without the packages: nothing is migrated down,
+// because uninstalling a package does not delete what people stored with it.
+const removed = buildHost('extension-host-without', []);
+failures += suite(removed, 'ExtensionsWithout', [
+  'composer install --no-interaction --no-progress > install.log 2>&1',
+]);
+
+// The disposable database now records a migration whose source only exists while
+// the package is installed, so the schema is rolled back here rather than left
+// for the next suite to trip over.
+failures += attempt(installed, ['php vendor/bin/naf db:migrate down > migrate-down.log 2>&1']);
+
+process.exit(failures > 0 ? 1 : 0);

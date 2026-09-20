@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+/**
+ * Write composer.dev.json: the manifest plus a path repository for naf/board.
+ *
+ * naf/board is not on Packagist yet, so a development install resolves it from
+ * the working copy mounted at /var/board. Everything else comes from
+ * Packagist exactly as it will in a real installation, which is the point of
+ * keeping this file separate from composer.json rather than adding repositories
+ * to it.
+ */
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const manifest = JSON.parse(readFileSync(join(root, 'app/composer.json'), 'utf8'));
+
+// What the board pulls in, so a local package it depends on is resolved too:
+// the installation asks for naf/board, and naf/board asks for naf/rbac.
+const boardRoot = process.env.NAF_BOARD_ROOT ?? '../nafphp/board';
+const boardRequires = JSON.parse(
+  readFileSync(resolve(root, boardRoot, 'composer.json'), 'utf8'),
+).require;
+
+/*
+ * The NAF packages that are not on Packagist yet, each resolved from the working
+ * copy the container mounts. Everything else comes from Packagist exactly as it
+ * will in a real installation -- which is the point of keeping this file apart
+ * from composer.json rather than adding repositories to it.
+ *
+ * The paths are the container's and relative, because composer.dev.json sits in
+ * app/ and Composer resolves from there: ../board and ../nafphp/rbac are what
+ * compose mounts at /var/board and /var/nafphp/rbac.
+ */
+const local = {
+  'naf/board': '../board',
+  'naf/rbac': '../nafphp/rbac',
+};
+
+manifest.repositories = [];
+for (const [name, url] of Object.entries(local)) {
+  const wanted = manifest.require[name] ?? boardRequires[name];
+  if (!wanted) continue;
+
+  manifest.repositories.push({
+    type: 'path',
+    url,
+    options: { symlink: true, versions: { [name]: wanted.replace(/^\^/, '') } },
+  });
+}
+
+manifest['minimum-stability'] = 'dev';
+manifest['prefer-stable'] = true;
+
+writeFileSync(join(root, 'app/composer.dev.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+console.log(
+  'composer.dev.json written with path repositories for '
+  + manifest.repositories.map((repository) => Object.keys(repository.options.versions)[0]).join(', '),
+);

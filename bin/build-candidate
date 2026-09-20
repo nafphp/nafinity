@@ -1,170 +1,202 @@
-#!/usr/bin/env python3
-# Build an immutable local RC snapshot; this is explicitly not a published distribution.
-from pathlib import Path
-import argparse
-import shutil
-import subprocess
-import json
-import hashlib
+#!/usr/bin/env node
+/**
+ * Build an immutable local RC snapshot; this is explicitly not a published
+ * distribution.
+ *
+ * What makes it a snapshot rather than the development environment: no source
+ * mounts, no symlinks and no Composer inside the image. Everything the
+ * installation needs is copied in as ordinary files, and the manifest beside it
+ * records a digest per package so two builds can be compared.
+ */
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-root = Path(__file__).resolve().parents[1]
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument(
-    "--source",
-    default="app",
-    help="Installation to package, relative to the project root (default: app).",
-)
-parser.add_argument("--tag", default="nafinity:candidate", help="Image tag to build.")
-parser.add_argument(
-    "--context",
-    default="work/runtime-candidate",
-    help="Build context directory, relative to the project root.",
-)
-arguments = parser.parse_args()
-source = root / arguments.source
-assert source.is_dir(), "No such installation: " + str(source)
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-# Registered plugin assets are published into the document root before anything
-# is copied, so the image carries them as ordinary files. An installation with
-# no plugins publishes nothing and the step is simply a no-op.
-# The project is mounted where its own relative paths point, so an installation
-# whose vendor directory links to ../../packages works here exactly as it does
-# outside the container.
-publish = subprocess.run(
-    [
-        "docker",
-        "compose",
-        "run",
-        "--rm",
-        "--no-deps",
-        "-T",
-        "--volume",
-        str(root) + ":/workspace/project",
-        "--volume",
-        str((root / "packages").resolve()) + ":/workspace/nafphp:ro",
-        "--workdir",
-        "/workspace/project/" + source.relative_to(root).as_posix(),
-        "app",
-        "php",
-        "vendor/bin/naf",
-        "nafinity:assets:publish",
-    ],
-    cwd=root,
-    capture_output=True,
-    text=True,
-    check=True,
-)
-# A CLI that cannot find its own entry point still exits zero, so the report it
-# is supposed to print is what proves the step actually ran.
-assert "Published" in publish.stdout, (
-    "Publishing plugin assets produced no report:\n" + publish.stdout + publish.stderr
-)
-print(publish.stdout.strip())
+/**
+ * The board working copy, addressed the way compose.yaml addresses it.
+ *
+ * Not through a symlink in this project: the ones Composer writes belong to the
+ * container, where the working copy is mounted, and this side has to name it
+ * itself. NAF_BOARD_ROOT is compose's own variable, so a checkout somewhere
+ * else is already described in one place.
+ */
+const board = realpathSync(resolve(root, process.env.NAF_BOARD_ROOT ?? '../nafphp/board'));
 
-context = root / arguments.context
-context.mkdir(parents=True, exist_ok=True)
-app = context / "app"
-if app.exists():
-    shutil.rmtree(app)
-ignore = shutil.ignore_patterns(
-    ".git",
-    ".idea",
-    ".env*",
-    "identity.local.php",
-    "*-ca.pem",
-    "vendor",
-    "storage",
-    "logs",
-    "tests",
-    "__pycache__",
-    ".phpstan-cache",
-    ".phpunit.cache",
-    ".phpunit.result.cache",
-    ".php-cs-fixer.cache",
-    ".DS_Store",
-    "composer.dev.*",
-    "composer.lock",
-)
-shutil.copytree(source, app, ignore=ignore)
-# Package names must not be filtered by application data-directory names.
-vendor_ignore = shutil.ignore_patterns(
-    ".git",
-    ".idea",
-    ".env*",
-    "identity.local.php",
-    "*-ca.pem",
-    "vendor",
-    "logs",
-    "tests",
-    "__pycache__",
-    ".phpstan-cache",
-    ".phpunit.cache",
-    ".phpunit.result.cache",
-    ".php-cs-fixer.cache",
-    ".DS_Store",
-    "composer.dev.*",
-    "composer.lock",
-)
-shutil.copytree(source / "vendor", app / "vendor", symlinks=False, ignore=vendor_ignore)
-docker_context = context / "docker"
-if docker_context.exists():
-    shutil.rmtree(docker_context)
-shutil.copytree(
-    root / "docker", docker_context, ignore=shutil.ignore_patterns("*.pem", ".generate-*")
-)
-packages = {}
-for manifest in (app / "vendor/naf").glob("*/composer.json"):
-    package = manifest.parent
-    files = sorted(p for p in package.rglob("*") if p.is_file())
-    digest = hashlib.sha256()
-    for file in files:
-        digest.update(str(file.relative_to(package)).encode())
-        digest.update(file.read_bytes())
-    packages[json.loads(manifest.read_text())["name"]] = digest.hexdigest()
-published = sorted(
-    str(asset.relative_to(app / "public"))
-    for asset in (app / "public/plugins").rglob("*")
-    if asset.is_file()
-)
-(app / "source-snapshot.json").write_text(
-    json.dumps(
-        {
-            "mode": "unreleased-source-snapshot",
-            "source": arguments.source,
-            "packages": packages,
-            "published_plugin_assets": published,
-        },
-        indent=2,
-    )
-    + "\n"
-)
-expected = {
-    name
-    for name in json.loads((source / "composer.json").read_text())["require"]
-    if name.startswith("naf/")
+/** --source, --tag and --context, each with a default. */
+function option(name, fallback) {
+  const index = process.argv.indexOf(`--${name}`);
+
+  return index === -1 ? fallback : process.argv[index + 1];
 }
-assert expected == set(packages), "The snapshot is missing required NAF packages: " + str(
-    expected - set(packages)
-)
-assert not any(p.is_symlink() for p in app.rglob("*"))
-base = (root / "docker/Dockerfile").read_text().split("# Vendor must be prepared")[0]
-(context / "Dockerfile").write_text(
-    base
-    + """FROM runtime AS candidate
+
+const sourceName = option('source', 'app');
+const tag = option('tag', 'nafinity:candidate');
+const contextName = option('context', 'work/runtime-candidate');
+const source = join(root, sourceName);
+
+if (!existsSync(source) || !statSync(source).isDirectory()) {
+  throw new Error(`No such installation: ${source}`);
+}
+
+// Registered plugin assets are published into the document root before anything
+// is copied, so the image carries them as ordinary files. An installation with
+// no plugins publishes nothing and the step is simply a no-op.
+const published = execFileSync(
+  'docker',
+  [
+    'compose', 'run', '--rm', '--no-deps', '-T',
+    // The installation alone, at the path the app service gives it, so that the
+    // symlinks Composer wrote inside it resolve here the way they resolve there.
+    // vendor/naf/board is one of them, which is what the second mount answers.
+    // Mounting the project instead would put that target inside a bind mount and
+    // have Docker create the missing directory in the working copy.
+    '--volume', `${source}:/var/www`,
+    '--volume', `${board}:/var/board:ro`,
+    '--workdir', '/var/www',
+    'app', 'php', 'vendor/bin/naf', 'nafinity:assets:publish',
+  ],
+  { cwd: root, encoding: 'utf8' },
+);
+
+// A CLI that cannot find its own entry point still exits zero, so the report it
+// is supposed to print is what proves the step actually ran.
+if (!published.includes('Published')) {
+  throw new Error(`Publishing plugin assets produced no report:\n${published}`);
+}
+console.log(published.trim());
+
+const context = join(root, contextName);
+const app = join(context, 'app');
+mkdirSync(context, { recursive: true });
+rmSync(app, { recursive: true, force: true });
+
+const ignored = [
+  '.git', '.idea', 'identity.local.php', 'vendor', 'storage', 'logs', 'tests',
+  '__pycache__', '.phpstan-cache', '.phpunit.cache', '.phpunit.result.cache',
+  '.php-cs-fixer.cache', '.DS_Store', 'composer.lock',
+];
+const ignoredPattern = /^(\.env.*|.*-ca\.pem|composer\.dev\..*)$/;
+
+/**
+ * Keep everything but the named things, and always keep the root being copied.
+ *
+ * The root has to be exempt: the directory to exclude inside an installation is
+ * called `vendor`, and the vendor copy below starts at a directory of exactly
+ * that name.
+ */
+const except = (base, names) => (path) =>
+  path === base
+  || (!names.includes(path.split('/').pop()) && !ignoredPattern.test(path.split('/').pop()));
+
+cpSync(source, app, { recursive: true, filter: except(source, ignored) });
+
+// Package names must not be filtered by application data-directory names, so
+// vendor is copied with a list of its own that keeps storage and logs.
+const vendorNoise = [
+  '.git', '.idea', 'identity.local.php', 'vendor', 'logs', 'tests', '__pycache__',
+  '.phpstan-cache', '.phpunit.cache', '.phpunit.result.cache', '.php-cs-fixer.cache', '.DS_Store',
+];
+const keep = except(join(source, 'vendor'), vendorNoise);
+
+// Composer installed naf/board as a symlink, and it wrote it in the container,
+// where the working copy is mounted. Out here there is nothing at that target to
+// dereference, so the copy steps over it and the working copy goes in its place.
+// A snapshot carries the code either way.
+const installedBoard = join(source, 'vendor/naf/board');
+
+cpSync(join(source, 'vendor'), join(app, 'vendor'), {
+  recursive: true,
+  dereference: true,
+  filter: (path) => path !== installedBoard && keep(path),
+});
+cpSync(board, join(app, 'vendor/naf/board'), {
+  recursive: true,
+  filter: except(board, vendorNoise),
+});
+
+const dockerContext = join(context, 'docker');
+rmSync(dockerContext, { recursive: true, force: true });
+cpSync(join(root, 'docker'), dockerContext, {
+  recursive: true,
+  filter: (path) => !/\.pem$/.test(path) && !path.split('/').pop().startsWith('.generate-'),
+});
+
+/** @return {string[]} every file under a directory, relative to it, sorted. */
+function filesUnder(directory, prefix = '') {
+  const found = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) found.push(...filesUnder(join(directory, entry.name), path));
+    else if (entry.isFile()) found.push(path);
+  }
+
+  return found.sort();
+}
+
+// One digest per package, over its file names and their contents: a snapshot
+// that says which code it carries, not only which versions were asked for.
+const packages = {};
+const vendorNaf = join(app, 'vendor/naf');
+for (const name of existsSync(vendorNaf) ? readdirSync(vendorNaf) : []) {
+  const manifest = join(vendorNaf, name, 'composer.json');
+  if (!existsSync(manifest)) continue;
+
+  const digest = createHash('sha256');
+  for (const file of filesUnder(join(vendorNaf, name))) {
+    digest.update(file);
+    digest.update(readFileSync(join(vendorNaf, name, file)));
+  }
+  packages[JSON.parse(readFileSync(manifest, 'utf8')).name] = digest.digest('hex');
+}
+
+const plugins = join(app, 'public/plugins');
+const publishedAssets = existsSync(plugins)
+  ? filesUnder(plugins).map((file) => `plugins/${file}`)
+  : [];
+
+writeFileSync(
+  join(app, 'source-snapshot.json'),
+  `${JSON.stringify({
+    mode: 'unreleased-source-snapshot',
+    source: sourceName,
+    packages,
+    published_plugin_assets: publishedAssets,
+  }, null, 2)}\n`,
+);
+
+const expected = Object.keys(JSON.parse(readFileSync(join(source, 'composer.json'), 'utf8')).require)
+  .filter((name) => name.startsWith('naf/'));
+const missing = expected.filter((name) => !(name in packages));
+if (missing.length > 0) {
+  throw new Error(`The snapshot is missing required NAF packages: ${missing.join(', ')}`);
+}
+
+// No symlink may survive into the image: the point of the snapshot is that it
+// carries its code rather than pointing at a working copy.
+for (const file of filesUnder(app)) {
+  if (lstatSync(join(app, file)).isSymbolicLink()) {
+    throw new Error(`The snapshot still contains a symlink: ${file}`);
+  }
+}
+
+const base = readFileSync(join(root, 'docker/Dockerfile'), 'utf8').split('# Vendor must be prepared')[0];
+writeFileSync(
+  join(context, 'Dockerfile'),
+  `${base}FROM runtime AS candidate
 LABEL org.opencontainers.image.title="Nafinity local RC snapshot"
 LABEL dev.nafinity.distribution="unreleased-source-snapshot"
-COPY --chown=www:www app/ /workspace/app/
+COPY --chown=www:www app/ /var/www/
 RUN mkdir -p storage/sessions storage/logs storage/attachments storage/queue storage/schedule storage/oauth
-"""
-)
-subprocess.run(
-    ["docker", "build", "--target", "candidate", "-t", arguments.tag, str(context)],
-    check=True,
-)
-print(
-    "Built "
-    + arguments.tag
-    + " without source mounts, symlinks or Composer, carrying "
-    + str(len(published))
-    + " published plugin asset(s). Package releases remain a separate gate."
-)
+`,
+);
+
+execFileSync('docker', ['build', '--target', 'candidate', '-t', tag, context], { stdio: 'inherit' });
+
+console.log(
+  `Built ${tag} without source mounts, symlinks or Composer, carrying `
+  + `${publishedAssets.length} published plugin asset(s). Package releases remain a separate gate.`,
+);

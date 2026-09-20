@@ -1,123 +1,104 @@
-#!/usr/bin/env python3
-"""Generate or renew a localhost certificate signed by a private development CA."""
+#!/usr/bin/env node
+/**
+ * Generate or renew a localhost certificate signed by a private development CA.
+ *
+ * The fallback for a machine without the shared cert-authority beside it. The
+ * authority's private key stays in work/tls and is never mounted anywhere: only
+ * the server key and the public certificates reach the container.
+ */
+import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-from pathlib import Path
-import os
-import secrets
-import shutil
-import subprocess
-import tempfile
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const directory = join(root, 'docker/rootfs/etc/nginx/ssl');
+const certificate = join(directory, 'fullchain.pem');
+const privateKey = join(directory, 'privkey.pem');
+const publicAuthority = join(directory, 'ca.pem');
+const authorityDirectory = join(root, 'work/tls');
+const authorityKey = join(authorityDirectory, 'ca-key.pem');
+const authorityCertificate = join(authorityDirectory, 'ca.pem');
+const configuration = join(root, 'docker/rootfs/etc/ssl/nafinity.cnf');
 
-root = Path(__file__).resolve().parents[1]
-directory = root / "docker/rootfs/etc/nginx/ssl"
-certificate = directory / "fullchain.pem"
-private_key = directory / "privkey.pem"
-public_authority = directory / "ca.pem"
-authority_directory = root / "work/tls"
-authority_key = authority_directory / "ca-key.pem"
-authority_certificate = authority_directory / "ca.pem"
-configuration = root / "docker/rootfs/etc/ssl/nafinity.cnf"
+const openssl = (...args) =>
+  execFileSync('openssl', args.map(String), { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
+/** Work in a directory of its own, and move the result into place at the end. */
+function staged(where, work) {
+  const temporary = mkdtempSync(join(where, '.generate-'));
+  try {
+    work(temporary);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
 
-def openssl(*arguments):
-    return subprocess.run(
-        ["openssl", *map(str, arguments)],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+mkdirSync(directory, { recursive: true });
 
+// Nothing to do if what is installed still verifies, is not about to expire, and
+// the key beside it belongs to it.
+if ([certificate, privateKey, publicAuthority].every((file) => existsSync(file))) {
+  try {
+    openssl('verify', '-CAfile', publicAuthority, certificate);
+    openssl('x509', '-in', certificate, '-checkend', '86400', '-noout');
+    if (
+      openssl('x509', '-in', certificate, '-pubkey', '-noout')
+      === openssl('pkey', '-in', privateKey, '-pubout')
+    ) {
+      console.log('Existing valid localhost certificate retained.');
+      process.exit(0);
+    }
+  } catch {
+    // Any of those failing simply means it has to be reissued below.
+  }
+}
 
-directory.mkdir(parents=True, exist_ok=True)
-if certificate.is_file() and private_key.is_file() and public_authority.is_file():
-    try:
-        openssl("verify", "-CAfile", public_authority, certificate)
-        openssl("x509", "-in", certificate, "-checkend", "86400", "-noout")
-        certificate_public_key = openssl("x509", "-in", certificate, "-pubkey", "-noout")
-        actual_public_key = openssl("pkey", "-in", private_key, "-pubout")
-        if certificate_public_key == actual_public_key:
-            print("Existing valid localhost certificate retained.")
-            raise SystemExit(0)
-    except subprocess.CalledProcessError:
-        pass
+mkdirSync(authorityDirectory, { recursive: true, mode: 0o700 });
 
-authority_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-if not authority_key.is_file() or not authority_certificate.is_file():
-    with tempfile.TemporaryDirectory(prefix=".generate-", dir=authority_directory) as temporary:
-        temporary = Path(temporary)
-        openssl(
-            "req",
-            "-x509",
-            "-newkey",
-            "rsa:4096",
-            "-sha256",
-            "-nodes",
-            "-days",
-            "3650",
-            "-config",
-            configuration,
-            "-extensions",
-            "authority",
-            "-subj",
-            "/CN=Nafinity Local Development CA/O=Nafinity",
-            "-keyout",
-            temporary / "ca-key.pem",
-            "-out",
-            temporary / "ca.pem",
-        )
-        (temporary / "ca-key.pem").chmod(0o600)
-        os.replace(temporary / "ca-key.pem", authority_key)
-        os.replace(temporary / "ca.pem", authority_certificate)
-
-with tempfile.TemporaryDirectory(prefix=".generate-", dir=directory) as temporary:
-    temporary = Path(temporary)
-    generated_key = temporary / "privkey.pem"
-    generated_certificate = temporary / "fullchain.pem"
+if (!existsSync(authorityKey) || !existsSync(authorityCertificate)) {
+  staged(authorityDirectory, (temporary) => {
     openssl(
-        "req",
-        "-new",
-        "-newkey",
-        "rsa:4096",
-        "-sha256",
-        "-nodes",
-        "-config",
-        configuration,
-        "-keyout",
-        generated_key,
-        "-out",
-        temporary / "server.csr",
-    )
-    openssl(
-        "x509",
-        "-req",
-        "-in",
-        temporary / "server.csr",
-        "-sha256",
-        "-days",
-        "365",
-        "-CA",
-        authority_certificate,
-        "-CAkey",
-        authority_key,
-        "-set_serial",
-        "0x" + secrets.token_hex(16),
-        "-extfile",
-        configuration,
-        "-extensions",
-        "extensions",
-        "-out",
-        generated_certificate,
-    )
-    openssl("verify", "-CAfile", authority_certificate, generated_certificate)
-    generated_key.chmod(0o600)
-    generated_certificate.chmod(0o644)
-    os.replace(generated_key, private_key)
-    os.replace(generated_certificate, certificate)
-    shutil.copyfile(authority_certificate, public_authority)
-    public_authority.chmod(0o644)
+      'req', '-x509', '-newkey', 'rsa:4096', '-sha256', '-nodes', '-days', '3650',
+      '-config', configuration, '-extensions', 'authority',
+      '-subj', '/CN=Nafinity Local Development CA/O=Nafinity',
+      '-keyout', join(temporary, 'ca-key.pem'),
+      '-out', join(temporary, 'ca.pem'),
+    );
+    chmodSync(join(temporary, 'ca-key.pem'), 0o600);
+    renameSync(join(temporary, 'ca-key.pem'), authorityKey);
+    renameSync(join(temporary, 'ca.pem'), authorityCertificate);
+  });
+}
 
-print("Generated localhost certificate signed by the local development CA (365 days, DNS/IP SANs).")
-print("CA private key stays in work/tls; only server key and public certificates are mounted.")
-print(
-    "Import docker/rootfs/etc/nginx/ssl/ca.pem into Keychain to trust local HTTPS in the browser."
-)
+staged(directory, (temporary) => {
+  const generatedKey = join(temporary, 'privkey.pem');
+  const generatedCertificate = join(temporary, 'fullchain.pem');
+
+  openssl(
+    'req', '-new', '-newkey', 'rsa:4096', '-sha256', '-nodes',
+    '-config', configuration,
+    '-keyout', generatedKey,
+    '-out', join(temporary, 'server.csr'),
+  );
+  openssl(
+    'x509', '-req', '-in', join(temporary, 'server.csr'), '-sha256', '-days', '365',
+    '-CA', authorityCertificate, '-CAkey', authorityKey,
+    '-set_serial', `0x${randomBytes(16).toString('hex')}`,
+    '-extfile', configuration, '-extensions', 'extensions',
+    '-out', generatedCertificate,
+  );
+  openssl('verify', '-CAfile', authorityCertificate, generatedCertificate);
+
+  chmodSync(generatedKey, 0o600);
+  chmodSync(generatedCertificate, 0o644);
+  renameSync(generatedKey, privateKey);
+  renameSync(generatedCertificate, certificate);
+  copyFileSync(authorityCertificate, publicAuthority);
+  chmodSync(publicAuthority, 0o644);
+});
+
+console.log('Generated localhost certificate signed by the local development CA (365 days, DNS/IP SANs).');
+console.log('CA private key stays in work/tls; only server key and public certificates are mounted.');
+console.log('Import docker/rootfs/etc/nginx/ssl/ca.pem into Keychain to trust local HTTPS in the browser.');

@@ -13,9 +13,9 @@ BACKUP       ?=
 .NOTPARALLEL:
 .PHONY: certificates-shared help first-install install create-env-file check-env-file config-check \
         build-app run up stop down restart restart-background status logs ssh shell \
-        composer composer-install composer-update naf migrate seed health \
-        test test-up test-down test-mariadb test-postgres test-http test-profile test-worker test-ai \
-        test-plugins \
+        composer composer-install composer-update naf migrate roles seed health \
+        test test-up test-down test-http test-plugins \
+        test-unit test-database test-database-postgres test-worker-suite test-js \
         style-install style-check style-fix backup verify-restore \
         candidate-build candidate-up candidate-down plugin-check certificates supervisor-status mailpit
 
@@ -35,6 +35,7 @@ install: check-env-file certificates storage-dirs ## Build, install dependencies
 	@$(MAKE) composer-install
 	@$(COMPOSE) up -d --wait db
 	@$(MAKE) migrate
+	@$(MAKE) roles
 	@$(MAKE) assets
 	@$(MAKE) seed
 	@$(MAKE) run
@@ -44,7 +45,7 @@ assets: check-env-file ## Copy the stylesheets and scripts of naf/board and ever
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf nafinity:assets:publish
 
 create-env-file: ## Create a private .env with random local passwords if missing
-	@python3 bin/init-env
+	@node bin/init-env
 
 check-env-file:
 	@test -f .env || { echo 'Run make first-install, or copy .env.example and set both passwords.' >&2; exit 2; }
@@ -57,11 +58,11 @@ certificates: ## Issue the HTTPS certificate, from $(CERT_AUTHORITY) when it is 
 	@if [ -f "$(CERT_AUTHORITY)/ca/ca-key.pem" ]; then \
 		$(MAKE) --no-print-directory certificates-shared; \
 	else \
-		python3 bin/generate-certificates; \
+		node bin/generate-certificates; \
 	fi
 
 certificates-shared:
-	@if python3 bin/certificate-is-current "$(CERT_AUTHORITY)/ca/ca.pem"; then \
+	@if node bin/certificate-is-current "$(CERT_AUTHORITY)/ca/ca.pem"; then \
 		echo "Existing certificate from $(CERT_AUTHORITY) retained."; \
 	else \
 		$(MAKE) -C "$(CERT_AUTHORITY)" --no-print-directory cert HOST=localhost; \
@@ -125,6 +126,11 @@ naf: check-env-file ## Run the NAF CLI; e.g. ARGS='db:migrate up'
 migrate: check-env-file ## Apply app and plugin migrations using NAF
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf db:migrate up
 
+# Roles are declared in code and written once; a package that ships one brings
+# it along, and an installation that changed what a role carries keeps that.
+roles: check-env-file ## Write the roles the installed packages declare
+	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf rbac:sync
+
 seed: check-env-file ## Add demo data only when the development database is empty
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf nafinity:seed
 
@@ -136,48 +142,53 @@ health: check-env-file ## Check app readiness (database, migrations and storage)
 # The board is a dependency, and its suite belongs to it. It runs here because
 # this is where a container is: the tests boot this installation and reach the
 # board through it, which is also what a person gets. BOARD is the working copy
-# beside this project; inside the container it is mounted at /workspace/board.
-BOARD ?= ../board
-BOARD_IN_CONTAINER = /workspace/board
-BOARD_TEST = -e NAF_HOST=/workspace/app
+# among the other NAF packages; in the container it is mounted at /var/board.
+BOARD ?= ../nafphp/board
+BOARD_IN_CONTAINER = /var/board
+BOARD_TEST = -e NAF_HOST=/var/www
 # The host serves the certificate and holds docker/; the board ships neither.
 BOARD_HOST_ENV = NAF_HOST_CA=$(CURDIR)/docker/rootfs/etc/nginx/ssl/ca.pem \
 	NAF_HOST_ROOT=$(CURDIR)
 
-test: test-http test-profile test-postgres test-worker test-ai test-plugins ## Run MariaDB, PostgreSQL, HTTP, worker and extension checks in disposable databases
+test: test-unit test-database test-database-postgres test-worker-suite test-http test-js test-plugins ## Run every suite: unit, both databases, worker, HTTP and the extension hosts
 
 test-up: config-check certificates storage-dirs ## Prepare nafinity_test and start the isolated test services
 	@$(COMPOSE) up -d --wait db
 	@bin/prepare-test-database
 	@$(COMPOSE) --profile test up -d app-test postgres
 	@$(COMPOSE) exec -T app-test php vendor/bin/naf db:migrate up
+	@$(COMPOSE) exec -T app-test php vendor/bin/naf rbac:sync
 	@$(COMPOSE) --profile test up -d --wait app-test postgres
 
 test-down: check-env-file ## Stop test services, preserving the development environment
 	@$(COMPOSE) --profile test stop app-test postgres
 
-test-mariadb: test-up ## Reset and check only the MariaDB nafinity_test schema
-	@$(COMPOSE) exec -T $(BOARD_TEST) app-test php $(BOARD_IN_CONTAINER)/tests/run.php
+PHPUNIT = php /var/www/vendor/bin/phpunit -c $(BOARD_IN_CONTAINER)/phpunit.xml
 
-test-postgres: test-up ## Reset and check only the PostgreSQL nafinity_test schema
-	@$(COMPOSE) exec -T $(BOARD_TEST) -e DB_DRIVER=pgsql -e DB_HOST=postgres -e DB_PORT=5432 app-test php $(BOARD_IN_CONTAINER)/tests/run.php
+test-unit: test-up ## Run the board's unit tests: no database, no services, no fixtures
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test $(PHPUNIT) --testsuite Unit
 
-test-http: test-mariadb ## Reset test fixtures and check HTTP, permissions and private files
+test-database: test-up ## Run the board's database tests against MariaDB
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test $(PHPUNIT) --testsuite Database
+
+test-database-postgres: test-up ## Run the board's database tests against PostgreSQL
+	@$(COMPOSE) exec -T $(BOARD_TEST) -e DB_DRIVER=pgsql -e DB_HOST=postgres -e DB_PORT=5432 app-test $(PHPUNIT) --testsuite Database
+
+test-worker-suite: test-up ## Run the board's worker tests: a real worker, really killed
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test $(PHPUNIT) --testsuite Worker
+
+# The acceptance suite works on the demo data, because that is what a new
+# installation is given -- so this also checks the seed produces something the
+# application can serve.
+test-http: test-database ## Seed the disposable database and check the application over HTTPS
 	@$(COMPOSE) exec -T app-test php vendor/bin/naf nafinity:seed
-	@$(BOARD_HOST_ENV) python3 $(BOARD)/tests/http_acceptance.py
+	@$(COMPOSE) exec -T $(BOARD_TEST) app-test $(PHPUNIT) --testsuite Http
 
-test-profile: test-up ## Check password/email changes, SMTP delivery and session revocation over HTTPS
-	@$(BOARD_HOST_ENV) python3 $(BOARD)/tests/profile_http.py
-
-test-worker: test-up ## Check worker termination, lease recovery and dead letters
-	@$(COMPOSE) exec -T $(BOARD_TEST) app-test php $(BOARD_IN_CONTAINER)/tests/queue_process.php
-
-test-ai: ## Check local AI streaming transport and browser storage boundaries
-	@node $(BOARD)/tests/ai_transport.mjs
-	@node $(BOARD)/tests/ai_routing.mjs
+test-js: ## Run the board's JavaScript tests with the runner built into node
+	@node --test $(BOARD)/tests/js/*.test.js
 
 test-plugins: test-up ## Boot Nafinity with and without both example extensions
-	@python3 bin/check-extensions
+	@node bin/check-extensions
 
 style-install: check-env-file ## Install the pinned development formatters
 	@bin/style install

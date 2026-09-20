@@ -8,11 +8,11 @@ RUN apk add --no-cache ca-certificates curl msmtp nginx supervisor tzdata \
     php85-iconv php85-phar php85-ldap php85-intl php85-sodium \
     && ln -sf /usr/bin/php85 /usr/bin/php \
     && addgroup -g 1000 www && adduser -D -u 1000 -G www www \
-    && mkdir -p /workspace/app/storage /tmp/nginx /tmp/php \
-    && chown -R www:www /workspace /tmp/nginx /tmp/php
+    && mkdir -p /var/www/storage /tmp/nginx /tmp/php \
+    && chown -R www:www /var/www /tmp/nginx /tmp/php
 COPY docker/rootfs/ /
 
-WORKDIR /workspace/app
+WORKDIR /var/www
 USER www
 ENV NAFINITY_BACKGROUND_ENABLED=true
 EXPOSE 8080 8443
@@ -28,7 +28,7 @@ USER www
 
 # Vendor must be prepared by a verified distribution install; never copy Source-mode links.
 FROM runtime AS production
-COPY --chown=www:www app/ /workspace/app/
+COPY --chown=www:www app/ /var/www/
 
 RUN test -f composer.lock && test -f vendor/.nafinity-distribution \
     && test -z "$(find vendor -type l -print -quit)" \

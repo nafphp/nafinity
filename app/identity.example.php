@@ -22,7 +22,7 @@ return [
             'baseDn'            => 'ou=people,dc=example,dc=test',
             'bindDn'            => 'uid=search,ou=services,dc=example,dc=test',
             'bindPassword'      => 'ENV:LDAP_BIND_PASSWORD',
-            'caFile'            => '/workspace/app/config/directory-ca.pem',
+            'caFile'            => '/var/www/config/directory-ca.pem',
             'usernameAttribute' => 'mail',
             'subjectAttribute'  => 'entryUUID',
             'allowedFilter'     => '(objectClass=inetOrgPerson)',

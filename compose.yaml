@@ -5,7 +5,7 @@ x-runtime: &runtime
     context: .
     dockerfile: docker/Dockerfile
     target: development
-  working_dir: /workspace/app
+  working_dir: /var/www
   environment: &environment
     # APP_ENV deliberately absent: the application reads it from app/.env, which
     # is the file someone can edit. NAF's dotenv only fills gaps, so the test and
@@ -20,11 +20,11 @@ x-runtime: &runtime
     DB_USERNAME: nafinity
     DB_PASSWORD: ${NAFINITY_DB_PASSWORD:?Copy .env.example to .env and set the database passwords}
   volumes:
-    - ./app:/workspace/app
-    - ${NAF_SOURCE_ROOT:-../nafphp}:/workspace/packages:ro
+    - ./app:/var/www
+    - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro
     # naf/board is not published yet, so a development install resolves it
     # from a working copy. Drop this once it is on Packagist.
-    - ${NAF_BOARD_ROOT:-../board}:/workspace/board:ro
+    - ${NAF_BOARD_ROOT:-../nafphp/board}:/var/board:ro
     - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
   init: true
   logging:
@@ -50,7 +50,7 @@ services:
       NAFINITY_BACKGROUND_ENABLED: "false"
     ports: ["127.0.0.1:8090:8080", "127.0.0.1:8445:8443"]
     volumes:
-      - ./app/storage:/workspace/app/storage
+      - ./app/storage:/var/www/storage
       - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
     init: true
     depends_on:
@@ -67,13 +67,20 @@ services:
       NAFINITY_BACKGROUND_ENABLED: "false"
       DB_DATABASE: nafinity_test
     volumes:
-      - ./app:/workspace/app
-      - ${NAF_SOURCE_ROOT:-../nafphp}:/workspace/packages:ro
+      - ./app:/var/www
+      - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro
       # naf/board is not published yet, so a development install resolves it
       # from a working copy. Drop this once it is on Packagist.
-      - ${NAF_BOARD_ROOT:-../board}:/workspace/board:ro
-      - ./.test-storage:/workspace/app/storage
+      - ${NAF_BOARD_ROOT:-../nafphp/board}:/var/board:ro
+      - ./.test-storage:/var/www/storage
       - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
+      # The extension checks build throwaway hosts under work/ and run them here.
+      # They used to get a container of their own per step, which costs a
+      # container start each; with the project mounted they run in this one.
+      # Those hosts ask for ../../../nafphp, which is why the packages are
+      # mounted under that name above: the same text has to reach the same
+      # checkout in here as it does outside.
+      - .:/var/project
     depends_on:
       db: {condition: service_healthy}
       mailpit: {condition: service_started}
