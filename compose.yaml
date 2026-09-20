@@ -74,6 +74,11 @@ services:
       APP_URL: https://localhost:8444
       NAFINITY_BACKGROUND_ENABLED: "false"
       DB_DATABASE: nafinity_test
+      # Tokens are issued by the web process alone, so the suite can check the
+      # whole issuing path with no socket server anywhere. This key is fixed and
+      # in plain sight on purpose: it signs nothing that leaves this container.
+      WEBSOCKET_ENABLED: "true"
+      WEBSOCKET_KEY: a-key-for-the-test-container-only
     volumes:
       - ./app:/var/www
       - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro

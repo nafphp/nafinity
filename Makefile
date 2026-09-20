@@ -203,8 +203,13 @@ test-http: test-database ## Seed the disposable database and check the applicati
 	@$(COMPOSE) exec -T app-test php vendor/bin/naf nafinity:seed
 	@$(COMPOSE) exec -T $(BOARD_TEST) app-test $(PHPUNIT) --testsuite Http
 
-test-js: ## Run the board's JavaScript tests with the runner built into node
-	@node --test $(BOARD)/tests/js/*.test.js
+# naf/websocket ships a browser module too, and the rules in it -- which answer
+# to a token request means retry and which means give up -- are the kind that is
+# easy to get subtly wrong and impossible to notice.
+SOCKETS ?= ../nafphp/websocket
+
+test-js: ## Run the JavaScript tests of naf/board and naf/websocket with node's own runner
+	@node --test $(BOARD)/tests/js/*.test.js $(SOCKETS)/tests/js/*.test.js
 
 test-plugins: test-up ## Boot Nafinity with and without both example extensions
 	@node bin/check-extensions
