@@ -50,8 +50,8 @@ return [
      * installation opts in rather than having a second listening port appear
      * because it upgraded.
      *
-     * The key signs the connect tickets. Both the web process and the server
-     * read it, and it is the only thing between a forged ticket and a channel --
+     * The key signs the connect tokens. Both the web process and the server
+     * read it, and it is the only thing between a forged token and a channel --
      * so it comes from the environment and never from a file in a repository.
      */
     'websocket' => [
