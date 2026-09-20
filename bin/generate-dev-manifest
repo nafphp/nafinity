@@ -35,6 +35,7 @@ const boardRequires = JSON.parse(
 const local = {
   'naf/board': '../board',
   'naf/rbac': '../nafphp/rbac',
+  'naf/websocket': '../nafphp/websocket',
 };
 
 manifest.repositories = [];

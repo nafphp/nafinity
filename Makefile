@@ -128,6 +128,12 @@ migrate: check-env-file ## Apply app and plugin migrations using NAF
 
 # Roles are declared in code and written once; a package that ships one brings
 # it along, and an installation that changed what a role carries keeps that.
+websocket: check-env-file ## Run the socket server in the foreground, for watching it work
+	@$(COMPOSE) exec app php vendor/bin/naf websocket:serve
+
+websocket-status: check-env-file ## Is the supervised socket server up?
+	@$(COMPOSE) exec app sh -c 'ls -l /tmp/naf-websocket.sock 2>/dev/null || echo "kein Steuersocket -- läuft der Server?"'
+
 roles: check-env-file ## Write the roles the installed packages declare
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf rbac:sync
 

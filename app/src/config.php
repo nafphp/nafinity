@@ -44,7 +44,22 @@ return [
     // Off by default: an installation that delivers mail should say so
     // deliberately, and say who it comes from.
     'nafinity' => ['mail_enabled' => false, 'mail_from' => 'ENV:NAFINITY_MAIL_FROM'],
-    'mail'     => ['transport' => MailTransport::class],
+
+    /*
+     * Live updates. Off by default: the pages work without them, so an
+     * installation opts in rather than having a second listening port appear
+     * because it upgraded.
+     *
+     * The key signs the connect tickets. Both the web process and the server
+     * read it, and it is the only thing between a forged ticket and a channel --
+     * so it comes from the environment and never from a file in a repository.
+     */
+    'websocket' => [
+        'enabled' => 'ENV:WEBSOCKET_ENABLED',
+        'key'     => 'ENV:WEBSOCKET_KEY',
+        'url'     => 'ENV:WEBSOCKET_URL',
+    ],
+    'mail' => ['transport' => MailTransport::class],
 
     // Only reached once a provider is configured. auto_register stays false so an
     // external account cannot create a local one by signing in.
