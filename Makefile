@@ -13,7 +13,7 @@ BACKUP       ?=
 .NOTPARALLEL:
 .PHONY: certificates-shared help first-install install create-env-file check-env-file config-check \
         build-app run up stop down restart restart-background status logs ssh shell \
-        composer composer-install composer-update naf migrate roles seed health \
+        composer composer-install composer-update naf migrate roles seed health assets assets-check \
         test test-up test-down test-http test-plugins \
         test-unit test-database test-database-postgres test-worker-suite test-js \
         style-install style-check style-fix backup verify-restore \
@@ -140,10 +140,23 @@ roles: check-env-file ## Write the roles the installed packages declare
 seed: check-env-file ## Add demo data only when the development database is empty
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf nafinity:seed
 
-health: check-env-file ## Check app readiness (database, migrations and storage)
+health: check-env-file ## Check app readiness (database, migrations, storage and published assets)
 	@$(COMPOSE) exec -T app nafinity-healthcheck
 	@$(COMPOSE) exec -T app curl --fail --silent --show-error --cacert /etc/nginx/ssl/ca.pem https://localhost:8443/health/ready
 	@printf '\n'
+	@$(MAKE) --no-print-directory assets-check
+
+# A package registers its stylesheets and scripts, and a separate step copies
+# them into public/. So a package added later is registered and absent at the
+# same time -- which the browser reports as a 404 on a module tag, which is to
+# say silently. The comparison already exists; running it here is what turns
+# that silence into a sentence. Quiet when everything matches.
+assets-check: check-env-file ## Report registered package assets that were never published
+	@report=`$(COMPOSE) exec -T app php vendor/bin/naf nafinity:assets:check` || { \
+		printf '%s\n' "$$report"; \
+		echo 'Published assets are not what the packages ship -- run make assets.' >&2; \
+		exit 1; \
+	}
 
 # The board is a dependency, and its suite belongs to it. It runs here because
 # this is where a container is: the tests boot this installation and reach the
