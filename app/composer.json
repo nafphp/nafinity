@@ -1,19 +1,23 @@
 {
-  "name": "naf/nafinity",
-  "description": "Skeleton for a Nafinity installation: project-isolated Kanban boards, ready to extend.",
-  "type": "project",
-  "license": "proprietary",
-  "require": {
-    "php": ">=8.3",
-    "naf/board": "^0.1.0"
-  },
-  "autoload": {
-    "psr-4": {
-      "Nafinity\\": "src/"
+    "name": "naf/nafinity",
+    "description": "Skeleton for a Nafinity installation: project-isolated Kanban boards, ready to extend.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.3",
+        "naf/board": "^0.1.0",
+        "naf/websocket": "^0.1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Nafinity\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": false
     }
-  },
-  "config": {
-    "sort-packages": true,
-    "allow-plugins": false
-  }
 }

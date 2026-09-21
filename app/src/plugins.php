@@ -38,5 +38,6 @@ return [
     'naf/session',
     'naf/storage',
     'naf/view',
+    'naf/websocket',
     'naf/board',
 ];

@@ -45,8 +45,8 @@ update quietly puts it back.
     bin/style check        formatting, in the container
 
 `naf/board` is not on Packagist yet, so a development install resolves it from a working
-copy mounted beside this project -- see `NAF_BOARD_ROOT` in `compose.yaml` and
-`bin/generate-dev-manifest.py`. `composer.json` itself stays clean of path
+copy mounted from among the other NAF packages -- see `NAF_BOARD_ROOT` in
+`compose.yaml` and `bin/generate-dev-manifest`. `composer.json` itself stays clean of path
 repositories, because it describes a real installation.
 
 ## Never committed

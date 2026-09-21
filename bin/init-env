@@ -1,41 +1,55 @@
-#!/usr/bin/env python3
-"""Create the private local Compose environment without replacing existing settings."""
+#!/usr/bin/env node
+/**
+ * Create the private local Compose environment without replacing existing settings.
+ */
+import { randomBytes } from 'node:crypto';
+import { closeSync, openSync, readFileSync, writeSync, constants } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import os
-import secrets
-from pathlib import Path
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-root = Path(__file__).resolve().parents[1]
+/**
+ * Write a file only if it is not there, and never overwrite local settings.
+ *
+ * Exclusive creation rather than "does it exist": between the question and the
+ * answer somebody else may have created it, and this file holds passwords.
+ */
+function create(target, contents, made, kept) {
+  let handle;
+  try {
+    handle = openSync(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    console.log(kept);
 
+    return;
+  }
+  try {
+    writeSync(handle, contents);
+  } finally {
+    closeSync(handle);
+  }
+  console.log(made);
+}
 
-def create(target, contents, made, kept):
-    """Write a file only if it is not there, and never overwrite local settings."""
-    try:
-        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        print(kept)
-    else:
-        with os.fdopen(descriptor, "w") as output:
-            output.write(contents)
-        print(made)
+// The project environment: what Compose needs to bring the services up.
+const template = readFileSync(join(root, '.env.example'), 'utf8')
+  .replace('replace-with-a-local-password', randomBytes(24).toString('hex'))
+  .replace('replace-with-a-different-local-password', randomBytes(24).toString('hex'));
 
-
-# The project environment: what Compose needs to bring the services up.
-template = (root / ".env.example").read_text()
-template = template.replace("replace-with-a-local-password", secrets.token_hex(24))
-template = template.replace("replace-with-a-different-local-password", secrets.token_hex(24))
 create(
-    root / ".env",
-    template,
-    "Created private .env with random database passwords for local development.",
-    "Existing .env retained.",
-)
+  join(root, '.env'),
+  template,
+  'Created private .env with random database passwords for local development.',
+  'Existing .env retained.',
+);
 
-# The application environment, which NAF reads from BASE_PATH. Compose still wins
-# over it, so this is what matters where there is no Compose.
+// The application environment, which NAF reads from BASE_PATH. Compose still
+// wins over it, so this is what matters where there is no Compose.
 create(
-    root / "app/.env",
-    (root / "app/.env.example").read_text(),
-    "Created app/.env for the application itself.",
-    "Existing app/.env retained.",
-)
+  join(root, 'app/.env'),
+  readFileSync(join(root, 'app/.env.example'), 'utf8'),
+  'Created app/.env for the application itself.',
+  'Existing app/.env retained.',
+);

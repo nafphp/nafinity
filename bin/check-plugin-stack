@@ -1,106 +1,121 @@
-#!/usr/bin/env python3
-"""Repeatable source-mode discovery/boot lab, isolated from Nafinity's product schema."""
-from pathlib import Path
-import os
-import json
-import subprocess
+#!/usr/bin/env node
+/**
+ * Repeatable source-mode discovery/boot lab, isolated from Nafinity's product schema.
+ *
+ * Two throwaway installations are built from the NAF packages in source form --
+ * one with the smallest set that boots, one with everything -- and each is asked
+ * what it discovered. The point is that the packages find each other by being
+ * installed, with no list anybody maintains: a plugin that stops registering
+ * itself shows up here as one that is simply not there.
+ */
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-root = Path(__file__).resolve().parents[1]
-# The board is a dependency here, not this repository. In development it is a
-# working copy mounted beside the project; installed it sits in vendor.
-board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
-lab = root / "work/plugin-lab"
-requirements = json.loads((board / "composer.json").read_text())["require"]
-stacks = {
-    "minimal": ["framework", "cli", "auth", "database", "form", "orm", "session", "view"],
-    "all": [
-        "framework",
-        "cli",
-        "auth",
-        "client",
-        "database",
-        "form",
-        "i18n",
-        "mail",
-        "mcp",
-        "oauth-client",
-        "oauth-server",
-        "orm",
-        "queue",
-        "schedule",
-        "session",
-        "view",
-    ],
-}
-probe = r"""<?php
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+// The board is a dependency here, not this repository. In development it is a
+// working copy among the other NAF packages; installed it sits in vendor.
+const board = process.env.BOARD_ROOT ?? join(root, '../nafphp/board');
+const lab = join(root, 'work/plugin-lab');
+const requirements = JSON.parse(readFileSync(join(board, 'composer.json'), 'utf8')).require;
+
+const stacks = {
+  minimal: ['framework', 'cli', 'auth', 'database', 'form', 'orm', 'session', 'view'],
+  all: [
+    'framework', 'cli', 'auth', 'client', 'database', 'form', 'i18n', 'mail', 'mcp',
+    'oauth-client', 'oauth-server', 'orm', 'queue', 'schedule', 'session', 'view',
+  ],
+};
+
+const probe = `<?php
 declare(strict_types=1);
 $_ENV['APP_ENV']='test';
 define('BASE_PATH',__DIR__);
 require __DIR__.'/vendor/autoload.php';
-$app=Naf\app();$out=[];
+$app=Naf\\app();$out=[];
 foreach($app->getPlugins() as $name=>$plugin)$out['plugins'][$name]=['booted'=>$plugin->isBooted(),'path'=>$plugin->getBootstrapFile()];
-$out['commands']=array_keys($app->container()->get(Naf\CLI\Support\CommandRegistry::class)->all());
-$out['migrations']=Naf\Database\Support\MigrationRegistry::getPaths();
+$out['commands']=array_keys($app->container()->get(Naf\\CLI\\Support\\CommandRegistry::class)->all());
+$out['migrations']=Naf\\Database\\Support\\MigrationRegistry::getPaths();
 $out['pdo_bound']=$app->container()->has(PDO::class);
 $out['pdo_driver']=$app->container()->get(PDO::class)->getAttribute(PDO::ATTR_DRIVER_NAME);
-$out['routes']=array_keys(Naf\route()->all());
-echo json_encode($out,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n";
-"""
-for mode, names in stacks.items():
-    folder = lab / mode
-    (folder / "app").mkdir(parents=True, exist_ok=True)
-    config = {
-        "name": "local/nafinity-" + mode + "-lab",
-        "type": "project",
-        "license": "proprietary",
-        "description": "Unreleased source-mode NAF integration lab",
-        "require": {"php": ">=8.3"},
-        "repositories": [],
-        "minimum-stability": "dev",
-        "prefer-stable": True,
-        "config": {"allow-plugins": False},
-    }
-    for name in names:
-        package = "naf/" + name
-        version = requirements.get(package, "^0.2.2").lstrip("^") + "-dev"
-        config["require"][package] = version
-        config["repositories"].append(
-            {
-                "type": "path",
-                "url": "/workspace/packages/" + name,
-                "options": {"symlink": True, "versions": {package: version}},
-            }
-        )
-    (folder / "composer.json").write_text(json.dumps(config, indent=2) + "\n")
-    (folder / "app/config.php").write_text(
-        "<?php return ['database'=>['driver'=>'sqlite','database'=>':memory:'],'public_url'=>'https://nafinity.example.test','language'=>'de'];\n"
-    )
-    (folder / "probe.php").write_text(probe)
-subprocess.run(
-    [
-        "docker",
-        "compose",
-        "run",
-        "--rm",
-        "--no-deps",
-        "-v",
-        str(lab) + ":/workspace/labs",
-        "app",
-        "sh",
-        "-c",
-        "set -e; for mode in minimal all; do cd /workspace/labs/$mode; composer install --no-interaction --no-progress > install.log 2>&1; php probe.php > result.json; done",
-    ],
-    cwd=root,
-    check=True,
-)
-for mode, names in stacks.items():
-    result = json.loads((lab / mode / "result.json").read_text())
-    assert len(result["plugins"]) == len(names) - 1
-    assert all(p["booted"] for p in result["plugins"].values())
-    assert result["pdo_driver"] == "sqlite"
-    (board / "docs" / ("Integration-" + mode + ".json")).write_text(
-        json.dumps(result, indent=2) + "\n"
-    )
-    print(
-        mode + ": " + str(len(result["plugins"])) + " plugins booted; PDO=" + result["pdo_driver"]
-    )
+$out['routes']=array_keys(Naf\\route()->all());
+echo json_encode($out,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\\n";
+`;
+
+for (const [mode, names] of Object.entries(stacks)) {
+  const folder = join(lab, mode);
+  mkdirSync(join(folder, 'app'), { recursive: true });
+
+  const config = {
+    name: `local/nafinity-${mode}-lab`,
+    type: 'project',
+    license: 'proprietary',
+    description: 'Unreleased source-mode NAF integration lab',
+    require: { php: '>=8.3' },
+    repositories: [],
+    'minimum-stability': 'dev',
+    'prefer-stable': true,
+    config: { 'allow-plugins': false },
+  };
+
+  for (const name of names) {
+    const composerPackage = `naf/${name}`;
+    const version = `${(requirements[composerPackage] ?? '^0.2.2').replace(/^\^/, '')}-dev`;
+    config.require[composerPackage] = version;
+    config.repositories.push({
+      type: 'path',
+      url: `/var/nafphp/${name}`,
+      options: { symlink: true, versions: { [composerPackage]: version } },
+    });
+  }
+
+  writeFileSync(join(folder, 'composer.json'), `${JSON.stringify(config, null, 2)}\n`);
+
+  // The manifest is rewritten every run, so a lock from an earlier one can only
+  // disagree with it -- and Composer installs from the lock, so the disagreement
+  // wins silently. A lab that installs what it was told to last time is not the
+  // repeatable one it claims to be.
+  rmSync(join(folder, 'composer.lock'), { force: true });
+  writeFileSync(
+    join(folder, 'app/config.php'),
+    "<?php return ['database'=>['driver'=>'sqlite','database'=>':memory:'],'public_url'=>'https://nafinity.example.test','language'=>'de'];\n",
+  );
+  writeFileSync(join(folder, 'probe.php'), probe);
+}
+
+execFileSync(
+  'docker',
+  [
+    'compose', 'run', '--rm', '--no-deps',
+    '-v', `${lab}:/var/labs`,
+    'app', 'sh', '-c',
+    'set -e; for mode in minimal all; do cd /var/labs/$mode;'
+      + ' composer install --no-interaction --no-progress > install.log 2>&1;'
+      + ' php probe.php > result.json; done',
+  ],
+  { cwd: root, stdio: 'inherit' },
+);
+
+for (const [mode, names] of Object.entries(stacks)) {
+  const result = JSON.parse(readFileSync(join(lab, mode, 'result.json'), 'utf8'));
+  const plugins = Object.values(result.plugins);
+
+  // One fewer than the packages asked for: naf/framework is the application
+  // itself rather than a plugin of it.
+  if (plugins.length !== names.length - 1) {
+    throw new Error(`${mode}: ${plugins.length} plugins discovered, expected ${names.length - 1}`);
+  }
+  if (!plugins.every((plugin) => plugin.booted)) {
+    throw new Error(`${mode}: a discovered plugin did not boot`);
+  }
+  if (result.pdo_driver !== 'sqlite') {
+    throw new Error(`${mode}: the lab reached a database other than its own in-memory one`);
+  }
+
+  writeFileSync(
+    join(board, 'docs', `Integration-${mode}.json`),
+    `${JSON.stringify(result, null, 2)}\n`,
+  );
+  console.log(`${mode}: ${plugins.length} plugins booted; PDO=${result.pdo_driver}`);
+}

@@ -1,109 +1,85 @@
-#!/usr/bin/env python3
-"""Install, check or apply the project's pinned development formatters."""
+#!/usr/bin/env node
+/**
+ * Install, check or apply the project's pinned development formatters.
+ *
+ * Two languages, two formatters: php-cs-fixer for PHP and Prettier for the
+ * JavaScript and CSS the board ships. Both are pinned, and both run over this
+ * project *and* over naf/board -- the board is a dependency with its own code,
+ * its own style configuration and no container of its own. This is the
+ * container, so both are formatted from here.
+ */
+import { execFileSync } from 'node:child_process';
+import { existsSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import argparse
-import os
-import subprocess
-import sys
-from pathlib import Path
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const board = realpathSync(process.env.BOARD_ROOT ?? join(root, '../nafphp/board'));
+// Not /var/board: compose mounts the package there read-only, which is
+// right for serving it and wrong for a formatter. A path of its own is
+// writable, and the package's config resolves through __DIR__ either way.
+const BOARD_IN_CONTAINER = '/var/format-board';
+const tooling = join(root, 'tools/style');
+const phpTools = '/var/project/tools/style/php';
+const webTools = join(tooling, 'web');
 
-root = Path(__file__).resolve().parents[1]
-# The board is a dependency with its own code, its own style configuration and no
-# container of its own. This is the container, so both are formatted from here --
-# the host's own files and the package it installs.
-board = Path(os.environ.get("BOARD_ROOT", root.parent / "board"))
-# Not /workspace/board: compose mounts the package there read-only, which is
-# right for serving it and wrong for a formatter. A path of its own is
-# writable, and the package's config resolves through __DIR__ either way.
-BOARD_IN_CONTAINER = "/workspace/format-board"
-tooling = root / "tools/style"
-php_tools = "/workspace/project/tools/style/php"
-web_tools = tooling / "web"
-python_tools = tooling / "python"
-python = python_tools / ".venv/bin/python"
+const action = process.argv[2] ?? 'check';
+if (!['install', 'check', 'fix'].includes(action)) {
+  console.error('Usage: style [install|check|fix]');
+  process.exit(2);
+}
 
+const run = (command, args, options = {}) =>
+  execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options });
 
-def run(*command, cwd=None):
-    subprocess.run([str(argument) for argument in command], cwd=cwd or root, check=True)
+const container = (...command) =>
+  run('docker', [
+    'compose', 'run', '--rm', '--no-deps',
+    '--volume', `${root}:/var/project`,
+    '--volume', `${board}:${BOARD_IN_CONTAINER}`,
+    'app', ...command,
+  ]);
 
+if (action === 'install') {
+  container('composer', `--working-dir=${phpTools}`, 'install', '--no-interaction', '--no-progress');
+  run('npm', ['ci', '--prefix', webTools, '--ignore-scripts']);
+  process.exit(0);
+}
 
-def container(*command):
-    run(
-        "docker",
-        "compose",
-        "run",
-        "--rm",
-        "--no-deps",
-        "--volume",
-        f"{root}:/workspace/project",
-        "--volume",
-        f"{board.resolve()}:{BOARD_IN_CONTAINER}",
-        "app",
-        *command,
-    )
+const required = [
+  join(tooling, 'php/vendor/bin/php-cs-fixer'),
+  join(webTools, 'node_modules/prettier/bin/prettier.cjs'),
+];
+if (!required.every((path) => existsSync(path))) {
+  console.error('Install the pinned formatters first: bin/style install');
+  process.exit(2);
+}
 
+const check = action === 'check';
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("action", choices=["install", "check", "fix"], default="check", nargs="?")
-args = parser.parse_args()
+for (const config of [
+  '/var/project/.php-cs-fixer.dist.php',
+  `${BOARD_IN_CONTAINER}/.php-cs-fixer.dist.php`,
+]) {
+  container(
+    'php', `${phpTools}/vendor/bin/php-cs-fixer`, 'fix',
+    `--config=${config}`, '--sequential', '--show-progress=none',
+    ...(check ? ['--dry-run', '--diff'] : []),
+  );
+}
 
-if args.action == "install":
-    container(
-        "composer", f"--working-dir={php_tools}", "install", "--no-interaction", "--no-progress"
-    )
-    run("npm", "ci", "--prefix", web_tools, "--ignore-scripts")
-    run(sys.executable, "-m", "venv", python_tools / ".venv")
-    run(python, "-m", "pip", "install", "-r", python_tools / "requirements.txt")
-    sys.exit(0)
-
-required = [
-    tooling / "php/vendor/bin/php-cs-fixer",
-    web_tools / "node_modules/prettier/bin/prettier.cjs",
-    python,
-]
-if not all(path.exists() for path in required):
-    parser.error("Install the pinned formatters first: bin/style install")
-
-check = args.action == "check"
-php_options = ["--dry-run", "--diff"] if check else []
-for config in (
-    "/workspace/project/.php-cs-fixer.dist.php",
-    f"{BOARD_IN_CONTAINER}/.php-cs-fixer.dist.php",
-):
-    container(
-        "php",
-        f"{php_tools}/vendor/bin/php-cs-fixer",
-        "fix",
-        f"--config={config}",
-        "--sequential",
-        "--show-progress=none",
-        *php_options,
-    )
-# From the package's own directory, so its .prettierignore applies. It excludes
-# the vendored libraries under public/assets/vendor, and an ignore file only ever
-# matches paths relative to where the formatter runs.
+// From the package's own directory, so its .prettierignore applies. It excludes
+// the vendored libraries under src/Resources/public/assets/vendor, and an ignore
+// file only ever matches paths relative to where the formatter runs.
 run(
-    "node",
+  'node',
+  [
     required[1],
-    "--check" if check else "--write",
-    "src/Resources/public/assets/**/*.js",
-    "src/Resources/public/assets/**/*.css",
-    "tests/*.mjs",
-    cwd=board,
-)
-
-python_files = sorted((board / "tests").glob("*.py"))
-python_files += sorted(
-    path
-    for path in (root / "bin").iterdir()
-    if path.is_file()
-    and (path.suffix == ".py" or path.read_text().startswith("#!/usr/bin/env python3"))
-)
-run(
-    python,
-    "-m",
-    "black",
-    "--line-length=100",
-    *(["--check", "--diff"] if check else []),
-    *python_files,
-)
+    check ? '--check' : '--write',
+    'src/Resources/public/assets/**/*.js',
+    'src/Resources/public/assets/**/*.css',
+    'tests/js/*.test.js',
+    'tests/benchmarks/*.mjs',
+  ],
+  { cwd: board },
+);
