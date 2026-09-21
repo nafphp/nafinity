@@ -171,12 +171,18 @@ BOARD_HOST_ENV = NAF_HOST_CA=$(CURDIR)/docker/rootfs/etc/nginx/ssl/ca.pem \
 
 test: test-unit test-database test-database-postgres test-worker-suite test-http test-js test-plugins ## Run every suite: unit, both databases, worker, HTTP and the extension hosts
 
+# --reapply on the sync, which a real installation must never get: there the
+# rule is that whatever an installation changed about a declared role is its own
+# and survives an upgrade. The price of that rule is that a permission declared
+# after the roles were written reaches nobody until somebody grants it -- which
+# is right for a customer and wrong for a database that exists to check what the
+# code currently declares.
 test-up: config-check certificates storage-dirs ## Prepare nafinity_test and start the isolated test services
 	@$(COMPOSE) up -d --wait db
 	@bin/prepare-test-database
 	@$(COMPOSE) --profile test up -d app-test postgres
 	@$(COMPOSE) exec -T app-test php vendor/bin/naf db:migrate up
-	@$(COMPOSE) exec -T app-test php vendor/bin/naf rbac:sync
+	@$(COMPOSE) exec -T app-test php vendor/bin/naf rbac:sync --reapply
 	@$(COMPOSE) --profile test up -d --wait app-test postgres
 
 test-down: check-env-file ## Stop test services, preserving the development environment
