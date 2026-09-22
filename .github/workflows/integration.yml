@@ -1,0 +1,77 @@
+name: Board integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      board_ref:
+        description: Board commit or branch to exercise in this private host
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: nafinity
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/board
+          ref: ${{ inputs.board_ref || '5c61229c05c95b015a314609b2b9dfaebcaed67a' }}
+          path: nafphp/board
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/framework
+          ref: acf8ccb1e7ecbb1b360775200fa308540b3ea404
+          path: nafphp/framework
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/database
+          ref: 8f38cc8065349ec2e719320d31e1f8937087d832
+          path: nafphp/database
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/rbac
+          ref: 58aa675e4f53f967aea8fc1b1b53fed9aaab96c1
+          path: nafphp/rbac
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/websocket
+          ref: ed2a58d6215e3353b867855760e6a992e4aefb29
+          path: nafphp/websocket
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Prepare the disposable Linux host
+        working-directory: nafinity
+        run: |
+          make create-env-file certificates storage-dirs
+          mkdir -p work
+          chmod -R a+rwX app .test-storage work
+          sudo chown 1000:1000 docker/rootfs/etc/nginx/ssl/privkey.pem
+          umask 0000
+          make build-app composer-install
+      - name: Run both databases, HTTP, workers and real Composer extensions
+        working-directory: nafinity
+        run: |
+          set -o pipefail
+          umask 0000
+          make test 2>&1 | tee integration.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-results
+          path: nafinity/integration.log
+      - name: Remove disposable services
+        if: always() && hashFiles('nafinity/compose.yaml') != ''
+        working-directory: nafinity
+        run: docker compose --profile test down --volumes
