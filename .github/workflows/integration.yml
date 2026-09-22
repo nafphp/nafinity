@@ -57,7 +57,8 @@ jobs:
           make create-env-file certificates storage-dirs
           mkdir -p work
           chmod -R a+rwX app .test-storage work
-          sudo chown 1000:1000 docker/rootfs/etc/nginx/ssl/privkey.pem
+          sudo chgrp 1000 docker/rootfs/etc/nginx/ssl/privkey.pem
+          chmod 640 docker/rootfs/etc/nginx/ssl/privkey.pem
           umask 0000
           make build-app composer-install
       - name: Run both databases, HTTP, workers and real Composer extensions
@@ -71,6 +72,13 @@ jobs:
         with:
           name: integration-results
           path: nafinity/integration.log
+      - name: Diagnose failed services
+        if: failure()
+        working-directory: nafinity
+        run: |
+          docker compose --profile test ps -a
+          docker compose --profile test logs --tail=100 app-test
+          docker compose exec -T app-test nafinity-healthcheck || true
       - name: Remove disposable services
         if: always() && hashFiles('nafinity/compose.yaml') != ''
         working-directory: nafinity
