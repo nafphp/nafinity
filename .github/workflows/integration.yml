@@ -26,26 +26,59 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nafphp/board
-          ref: ${{ inputs.board_ref || 'b9d072e2c9d003bfe1d3b721ee6bf33c8df98834' }}
+          ref: ${{ inputs.board_ref || 'f118c8f9f433e901c5f4390dfb079a52401377ce' }}
           path: nafphp/board
       - uses: actions/checkout@v7
         with:
+          repository: nafphp/framework
+          ref: a00702e8324e1e311d7dad03879cffbe73697933
+          path: nafphp/framework
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/cli
+          ref: 1c8c29803e805176eade42b61d234b37a19140ef
+          path: nafphp/cli
+      - uses: actions/checkout@v7
+        with:
           repository: nafphp/database
-          ref: 8f38cc8065349ec2e719320d31e1f8937087d832
+          ref: 2f50dbf7646974b22bd5d275f4d7ed3502983429
           path: nafphp/database
       - uses: actions/checkout@v7
         with:
+          repository: nafphp/mcp
+          ref: e75ee05b2f3f04e127df137a6c94ea095a346929
+          path: nafphp/mcp
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/oauth-client
+          ref: 7502c054f4a5c1545fb83e836cd32cd11f170acf
+          path: nafphp/oauth-client
+      - uses: actions/checkout@v7
+        with:
+          repository: nafphp/queue
+          ref: a84d3a495eb1bed69768440b358dd845351a76a3
+          path: nafphp/queue
+      - uses: actions/checkout@v7
+        with:
           repository: nafphp/rbac
-          ref: 58aa675e4f53f967aea8fc1b1b53fed9aaab96c1
+          ref: f4aafba9fbe8ca8e133c0e9c4b18539c8995e565
           path: nafphp/rbac
       - uses: actions/checkout@v7
         with:
+          repository: nafphp/schedule
+          ref: cdf95d63ed5a1f6121e8f8ae15fb921abe78865f
+          path: nafphp/schedule
+      - uses: actions/checkout@v7
+        with:
           repository: nafphp/websocket
-          ref: ed2a58d6215e3353b867855760e6a992e4aefb29
+          ref: 184fb372289958a7cfbe84b70f3c83d154127f06
           path: nafphp/websocket
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - name: Verify console launcher forwarding
+        working-directory: nafinity
+        run: python3 tests/console_launcher_test.py
       - name: Prepare the disposable Linux host
         working-directory: nafinity
         run: |
@@ -56,6 +89,14 @@ jobs:
           chmod 640 docker/rootfs/etc/nginx/ssl/privkey.pem
           umask 0000
           make build-app composer-install
+      - name: Prove automatic ordering without a host plugin list
+        working-directory: nafinity
+        run: |
+          test ! -e app/src/plugins.php
+          test ! -e app/app/plugins.php
+          umask 0000
+          make test-up
+          NAF_CLI_SERVICE=app-test NAF_CLI_RUNTIME=compose bin/naf plugins:debug
       - name: Run both databases, HTTP, workers and real Composer extensions
         working-directory: nafinity
         run: |

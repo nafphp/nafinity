@@ -1,0 +1,43 @@
+#!/bin/sh
+# This installation owns the runtime choice; naf/cli remains Docker-independent.
+set -eu
+app=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+project=$(dirname -- "$app")
+runtime=${NAF_CLI_RUNTIME:-auto}
+case "$runtime" in
+    auto)
+        if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || [ ! -f "$project/compose.yaml" ]; then
+            runtime=local
+        else
+            runtime=compose
+        fi
+        ;;
+    local|compose) ;;
+    *) echo 'NAF_CLI_RUNTIME must be auto, local or compose.' >&2; exit 1 ;;
+esac
+if [ "$runtime" = local ]; then
+    cd "$app"
+    if [ ! -f vendor/bin/naf ]; then
+        echo 'NAF console is not installed. Run composer install first.' >&2
+        exit 1
+    fi
+    exec php vendor/bin/naf "$@"
+fi
+if ! command -v docker >/dev/null 2>&1; then
+    echo 'Docker is required for this installation. Start Docker or set NAF_CLI_RUNTIME=local explicitly.' >&2
+    exit 1
+fi
+cd "$project"
+service=${NAF_CLI_SERVICE:-app}
+# Probe failure is an error, never a reason to execute against a different local database.
+running=$(docker compose --project-directory "$project" -f "$project/compose.yaml" ps --status running -q "$service")
+if [ -n "$running" ]; then
+    if [ -t 0 ] && [ -t 1 ]; then
+        exec docker compose --project-directory "$project" -f "$project/compose.yaml" exec -w /var/www "$service" php vendor/bin/naf "$@"
+    fi
+    exec docker compose --project-directory "$project" -f "$project/compose.yaml" exec -T -w /var/www "$service" php vendor/bin/naf "$@"
+fi
+if [ -t 0 ] && [ -t 1 ]; then
+    exec docker compose --project-directory "$project" -f "$project/compose.yaml" run --rm --no-deps -w /var/www "$service" php vendor/bin/naf "$@"
+fi
+exec docker compose --project-directory "$project" -f "$project/compose.yaml" run --rm --no-deps -T -w /var/www "$service" php vendor/bin/naf "$@"
