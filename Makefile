@@ -121,7 +121,7 @@ composer-update: check-env-file ## Update the development lock using local NAF s
 	@bin/dev-composer update --no-interaction
 
 naf: check-env-file ## Run the NAF CLI; e.g. ARGS='db:migrate up'
-	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf $(ARGS)
+	@bin/naf $(ARGS)
 
 migrate: check-env-file ## Apply app and plugin migrations using NAF
 	@$(COMPOSE) run --rm --no-deps -T app php vendor/bin/naf db:migrate up

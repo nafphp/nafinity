@@ -40,6 +40,7 @@ update quietly puts it back.
 
     make first-install     prepare .env, build, install, migrate, seed, start
     make run               start everything
+    bin/naf command:list   console; uses Compose from the host and PHP inside the container
     make health            readiness: database, migrations, storage
     make test              the suites
     bin/style check        formatting, in the container
@@ -60,3 +61,11 @@ anything published into `app/public/plugins/` -- that directory is written by
 The reference is at https://nafphp.github.io/docs/ and the release and contribution
 rules are in `nafphp/docs/AGENT_WORKFLOW.md`. A README here may point at that
 documentation; it must not duplicate it, and it must never carry release state.
+
+## Console launcher
+
+`bin/naf` forwards to `app/bin/naf`. The CLI package installs that shortcut; this
+installation's `app/bin/naf-runtime` selects local PHP or the Compose service `app`.
+`NAF_CLI_RUNTIME=local|compose` explicitly overrides detection; `NAF_CLI_SERVICE`
+selects another Compose service. Docker errors must never fall back to local PHP.
+Run `python3 tests/console_launcher_test.py` after changing these shell launchers.

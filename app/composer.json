@@ -19,5 +19,10 @@
     "config": {
         "sort-packages": true,
         "allow-plugins": false
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@php -r '$GLOBALS[\"_naf_launcher_hook\"] = true; if (is_file('\\''vendor/bin/naf-install'\\'')) { require '\\''vendor/bin/naf-install'\\''; }'"
+        ]
     }
 }
