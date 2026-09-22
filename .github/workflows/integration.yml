@@ -26,13 +26,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nafphp/board
-          ref: ${{ inputs.board_ref || '82e2d9dabd618265bec78b3375a56035e05ec2e7' }}
+          ref: ${{ inputs.board_ref || 'b9d072e2c9d003bfe1d3b721ee6bf33c8df98834' }}
           path: nafphp/board
-      - uses: actions/checkout@v7
-        with:
-          repository: nafphp/framework
-          ref: acf8ccb1e7ecbb1b360775200fa308540b3ea404
-          path: nafphp/framework
       - uses: actions/checkout@v7
         with:
           repository: nafphp/database

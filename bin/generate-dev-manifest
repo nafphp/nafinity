@@ -21,7 +21,6 @@ const boardRequires = JSON.parse(
 // Relative to app/ inside the container; compose mounts these working copies.
 const local = {
   'naf/board': '../board',
-  'naf/framework': '../nafphp/framework',
   'naf/database': '../nafphp/database',
   'naf/rbac': '../nafphp/rbac',
   'naf/websocket': '../nafphp/websocket',

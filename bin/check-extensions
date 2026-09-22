@@ -46,7 +46,7 @@ function buildHost(folder, packages) {
   };
 
   for (const [composerPackage, constraint] of Object.entries({ 'naf/board': boardConstraint, ...manifest.require })) {
-    if (!['naf/board', 'naf/framework', 'naf/database', 'naf/rbac'].includes(composerPackage)) continue;
+    if (!['naf/board', 'naf/database', 'naf/rbac'].includes(composerPackage)) continue;
     const name = composerPackage.split('/')[1];
     config.repositories.push({
       type: 'path',
@@ -185,10 +185,27 @@ writeFileSync(
   join(installed, 'src/plugins.php'),
   "<?php\n\ndeclare(strict_types=1);\n\n"
   + "// Deliberately the wrong way round, to show it does not matter.\n"
-  + "return [...(require '/var/project/app/src/plugins.php'), 'example/nafinity-extension-b', 'example/nafinity-extension-a'];\n",
+  + "$plugins = require '/var/project/app/src/plugins.php';\n"
+  + "$plugins = array_values(array_diff($plugins, ['example/nafinity-extension-a', 'example/nafinity-extension-b', 'naf/board']));\n"
+  + "return [...$plugins, 'example/nafinity-extension-b', 'example/nafinity-extension-a', 'naf/board'];\n",
 );
 failures += suite(installed, 'ExtensionsOrder');
 writeFileSync(join(installed, 'src/plugins.php'), readFileSync(join(root, 'app/src/plugins.php')));
+
+// Host overrides run after providers, and host routes have the final word.
+// Exercise that boundary both in CLI boot and through the real front controller.
+for (const name of ['extensions.php', 'routes.php']) {
+  cpSync(join(board, 'tests/Fixtures/extension-host', name), join(installed, 'src', name));
+}
+failures += suite(installed, 'ExtensionsHost', [
+  'php -S 127.0.0.1:8099 -t public public/index.php > host-server.log 2>&1 &',
+  'server=$!',
+  'sleep 1',
+  "trap 'kill $server 2>/dev/null' EXIT",
+]);
+for (const name of ['extensions.php', 'routes.php']) {
+  cpSync(join(root, 'app/src', name), join(installed, 'src', name));
+}
 
 // Publishing a package's public files, through the same class the CLI commands
 // use, and then the commands themselves so their wiring is proven too.

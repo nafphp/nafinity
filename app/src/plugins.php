@@ -2,25 +2,17 @@
 
 declare(strict_types=1);
 
+use Composer\InstalledVersions;
+
 /**
- * The order plugins boot in.
+ * Infrastructure first, installed extensions next, Board last.
  *
- * Anything named here boots first, in this order; everything else follows in
- * whatever order Composer reports. That order is alphabetical, which is not an
- * order anyone chose -- naf/board would land third, between naf/auth-ldap and
- * naf/cli, purely because of its name.
- *
- * That breaks it. The board reaches for services other packages register while
- * booting -- Auth for the project policy, JobRepository for the maintenance job,
- * CommandRegistry for its commands -- so every package it builds on has to have
- * had its turn first. Booting third, it finds no scheduler and stops.
- *
- * So the framework packages come first and naf/board comes last among them.
- * Extensions are not listed at all: unnamed packages follow, which is exactly
- * where an extension belongs, because it replaces definitions the board has by
- * then already registered.
+ * Extensions only note their providers during plugin boot. Board registers its
+ * defaults and then runs those providers by index/id in its own bootstrap.
+ * Include every installed plugin here so a newly required package automatically
+ * boots before Board, without editing this list or needing a framework hook.
  */
-return [
+$infrastructure = [
     'naf/auth',
     'naf/auth-ldap',
     'naf/cli',
@@ -34,10 +26,18 @@ return [
     'naf/orm',
     'naf/queue',
     'naf/rate-limit',
+    'naf/rbac',
     'naf/schedule',
     'naf/session',
     'naf/storage',
     'naf/view',
     'naf/websocket',
+];
+
+$installed = InstalledVersions::getInstalledPackagesByType('naf-plugin');
+
+return [
+    ...$infrastructure,
+    ...array_values(array_diff($installed, [...$infrastructure, 'naf/board'])),
     'naf/board',
 ];
