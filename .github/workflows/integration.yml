@@ -91,7 +91,9 @@ jobs:
         run: |
           test ! -e app/src/plugins.php
           test ! -e app/app/plugins.php
-          make naf ARGS=plugins:debug
+          umask 0000
+          make test-up
+          docker compose exec -T app-test php vendor/bin/naf plugins:debug
       - name: Run both databases, HTTP, workers and real Composer extensions
         working-directory: nafinity
         run: |
