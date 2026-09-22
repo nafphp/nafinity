@@ -12,7 +12,7 @@ in `naf/board` and arrives through Composer. If a change belongs to how Nafinity
     app/src/config.php     everything the application runs on; naf/board proposes nothing
     app/src/routes.php     routes this installation adds, loaded after every plugin
     app/src/               the owner's code, namespace Nafinity\
-    app/src/plugins.php    infrastructure, installed extensions, then naf/board last
+    app/src/plugins.php    optional local ordering; normally absent, plugins declare before/after
     app/src/extensions.php optional, runs last, may replace or remove anything
     app/src/views/         a template here wins over the package's
     app/public/index.php   the entry point
