@@ -4,9 +4,9 @@
  * extensions.
  *
  * The extensions are installed as ordinary Composer packages from local path
- * repositories into throwaway hosts that share Nafinity's own source. The
- * development installation is never touched and nothing here reaches a package
- * registry: this proves discovery, boot and uninstall, not distribution.
+ * repositories into throwaway hosts using the same local package overrides as
+ * development. Other dependencies resolve from Composer. The development
+ * installation is never modified; this proves discovery, boot and uninstall.
  *
  * The phases run in order and each reads what the one before it left behind --
  * the host without the extensions is asked about rows the host with them wrote,
@@ -22,6 +22,8 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 // working copy mounted beside the project; installed it sits in vendor.
 const board = process.env.BOARD_ROOT ?? join(root, '../nafphp/board');
 const manifest = JSON.parse(readFileSync(join(board, 'composer.json'), 'utf8'));
+const hostManifest = JSON.parse(readFileSync(join(root, 'app/composer.json'), 'utf8'));
+const boardConstraint = hostManifest.require['naf/board'];
 const examples = ['example/nafinity-extension-a', 'example/nafinity-extension-b'];
 
 /** Write a disposable host that shares Nafinity's source and installs packages. */
@@ -32,20 +34,19 @@ function buildHost(folder, packages) {
     description: 'Disposable host for the Nafinity extension checks',
     type: 'project',
     license: 'proprietary',
-    require: { ...manifest.require },
+    require: { 'naf/board': boardConstraint },
     // A root package's require-dev is installed, which is what lets the suite
     // run against this host's autoloader rather than the development one's --
     // the very thing these checks are about.
     'require-dev': { 'phpunit/phpunit': '^12.1' },
-    autoload: manifest.autoload,
     config: { 'allow-plugins': false },
     'minimum-stability': 'dev',
     'prefer-stable': true,
     repositories: [],
   };
 
-  for (const [composerPackage, constraint] of Object.entries(manifest.require)) {
-    if (!composerPackage.startsWith('naf/')) continue;
+  for (const [composerPackage, constraint] of Object.entries({ 'naf/board': boardConstraint, ...manifest.require })) {
+    if (!['naf/board', 'naf/framework', 'naf/database', 'naf/rbac'].includes(composerPackage)) continue;
     const name = composerPackage.split('/')[1];
     config.repositories.push({
       type: 'path',
@@ -53,7 +54,7 @@ function buildHost(folder, packages) {
       // /var in the container, PhpstormProjects out here. The same text
       // has to mean the same packages on both sides, and this is the one
       // spelling that does without a symlink in the project to help it along.
-      url: `../../../nafphp/${name}`,
+      url: name === 'board' ? '../../../board' : `../../../nafphp/${name}`,
       options: {
         symlink: true,
         versions: { [composerPackage]: `${constraint.replace(/^\^/, '')}-dev` },
@@ -100,38 +101,13 @@ function buildHost(folder, packages) {
     else rmSync(target, { recursive: true, force: true });
   }
 
-  // The application's own source is copied rather than linked. A symlink would
-  // be cheaper, but PHP resolves __DIR__ through one -- a linked bootstrap.php
-  // would define BASE_PATH as the development installation and load its vendor
-  // -- and a host of real files can also be packaged into an image later.
-  //
-  // public/ is not among them: a package has no document root. The board's files
-  // live under src/Resources/public and are published into the host's, which is
-  // what the asset commands below actually exercise.
-  for (const name of ['src', 'tests']) {
-    cpSync(join(board, name), join(host, name), { recursive: true });
-  }
-  writeFileSync(join(host, 'bootstrap.php'), readFileSync(join(board, 'bootstrap.php')));
-
-  // The entry point belongs to the host, not to the package: naf/board ships no
-  // public/index.php because an installation has its own.
-  //
-  // It runs the application here, which the skeleton's does not need to: there
-  // the host's own bootstrap ends with run(). This host copies the package's
-  // bootstrap instead of installing it, and that one deliberately does not run
-  // anything -- the CLI probes load the very same file and would dispatch a
-  // request instead of reporting.
+  // Install the board as a real dependency. Only the skeleton supplies host files;
+  // copying the board bootstrap here would run its provider pass after plugin boot
+  // and hide lifecycle failures in normal Composer installations.
+  cpSync(join(root, 'app/src'), join(host, 'src'), { recursive: true });
   mkdirSync(join(host, 'public'), { recursive: true });
-  writeFileSync(
-    join(host, 'public/index.php'),
-    "<?php\n\ndeclare(strict_types=1);\n\nuse function Naf\\app;\n\n"
-    + "require_once dirname(__DIR__) . '/bootstrap.php';\n\napp()->run();\n",
-  );
-
-  // This host stands in for an installation, so it brings the installation's
-  // configuration. The board proposes none of its own -- everything the
-  // application runs on lives in the skeleton, which is the point.
-  writeFileSync(join(host, 'src/config.php'), readFileSync(join(root, 'app/src/config.php')));
+  cpSync(join(root, 'app/public/index.php'), join(host, 'public/index.php'), { recursive: true });
+  writeFileSync(join(host, 'bootstrap.php'), readFileSync(join(root, 'app/bootstrap.php')));
 
   return host;
 }
@@ -176,7 +152,7 @@ function attempt(host, steps) {
 
 /** Run one PHPUnit suite in a host, with anything it needs started first. */
 const suite = (host, name, steps = []) =>
-  attempt(host, [...steps, `php vendor/bin/phpunit -c tests/extensions.xml --testsuite ${name}`]);
+  attempt(host, [...steps, `php vendor/bin/phpunit -c vendor/naf/board/tests/extensions.xml --testsuite ${name}`]);
 
 // Non-zero once any suite has failed; every phase still runs, because a later
 // one often explains an earlier one.
@@ -209,10 +185,10 @@ writeFileSync(
   join(installed, 'src/plugins.php'),
   "<?php\n\ndeclare(strict_types=1);\n\n"
   + "// Deliberately the wrong way round, to show it does not matter.\n"
-  + "return ['example/nafinity-extension-b', 'example/nafinity-extension-a'];\n",
+  + "return [...(require '/var/project/app/src/plugins.php'), 'example/nafinity-extension-b', 'example/nafinity-extension-a'];\n",
 );
 failures += suite(installed, 'ExtensionsOrder');
-rmSync(join(installed, 'src/plugins.php'), { force: true });
+writeFileSync(join(installed, 'src/plugins.php'), readFileSync(join(root, 'app/src/plugins.php')));
 
 // Publishing a package's public files, through the same class the CLI commands
 // use, and then the commands themselves so their wiring is proven too.

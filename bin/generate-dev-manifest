@@ -1,12 +1,8 @@
 #!/usr/bin/env node
 /**
- * Write composer.dev.json: the manifest plus a path repository for naf/board.
- *
- * naf/board is not on Packagist yet, so a development install resolves it from
- * the working copy mounted at /var/board. Everything else comes from
- * Packagist exactly as it will in a real installation, which is the point of
- * keeping this file separate from composer.json rather than adding repositories
- * to it.
+ * Resolve the board and the packages under review from their mounted sources.
+ * Other dependencies use the published Composer constraints. The source aliases
+ * are explicitly development versions and never enter the installation manifest.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -22,18 +18,11 @@ const boardRequires = JSON.parse(
   readFileSync(resolve(root, boardRoot, 'composer.json'), 'utf8'),
 ).require;
 
-/*
- * The NAF packages that are not on Packagist yet, each resolved from the working
- * copy the container mounts. Everything else comes from Packagist exactly as it
- * will in a real installation -- which is the point of keeping this file apart
- * from composer.json rather than adding repositories to it.
- *
- * The paths are the container's and relative, because composer.dev.json sits in
- * app/ and Composer resolves from there: ../board and ../nafphp/rbac are what
- * compose mounts at /var/board and /var/nafphp/rbac.
- */
+// Relative to app/ inside the container; compose mounts these working copies.
 const local = {
   'naf/board': '../board',
+  'naf/framework': '../nafphp/framework',
+  'naf/database': '../nafphp/database',
   'naf/rbac': '../nafphp/rbac',
   'naf/websocket': '../nafphp/websocket',
 };
@@ -46,7 +35,7 @@ for (const [name, url] of Object.entries(local)) {
   manifest.repositories.push({
     type: 'path',
     url,
-    options: { symlink: true, versions: { [name]: wanted.replace(/^\^/, '') } },
+    options: { symlink: true, versions: { [name]: `${wanted.replace(/^\^/, '')}-dev` } },
   });
 }
 
