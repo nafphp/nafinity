@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nafphp/cli
-          ref: 0230e5840a63d80aaa3fab31f4e2196b123dd69b
+          ref: 1c8c29803e805176eade42b61d234b37a19140ef
           path: nafphp/cli
       - uses: actions/checkout@v7
         with:
