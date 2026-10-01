@@ -1,54 +1,62 @@
 #!/usr/bin/env node
 /**
- * Resolve the board and the packages under review from their mounted sources.
- * Other dependencies use the published Composer constraints. The source aliases
- * are explicitly development versions and never enter the installation manifest.
+ * Write app/composer.dev.json: the installation's manifest, with every NAF
+ * package it needs installed from its working copy instead of Packagist.
+ *
+ * A package counts when the installation needs it, directly or through another
+ * working copy, and its checkout exists under NAF_SOURCE_ROOT. Its alias is the
+ * highest lower bound any of them asks for, as a development version, so the
+ * working copy satisfies all of them. The aliases never reach app/composer.json,
+ * which describes a real installation.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const sources = resolve(root, process.env.NAF_SOURCE_ROOT ?? '../nafphp');
 const manifest = JSON.parse(readFileSync(join(root, 'app/composer.json'), 'utf8'));
 
-// What the board pulls in, so a local package it depends on is resolved too:
-// the installation asks for naf/board, and naf/board asks for naf/rbac.
-const boardRoot = process.env.NAF_BOARD_ROOT ?? '../nafphp/board';
-const boardRequires = JSON.parse(
-  readFileSync(resolve(root, boardRoot, 'composer.json'), 'utf8'),
-).require;
+const read = (folder) => JSON.parse(readFileSync(join(sources, folder, 'composer.json'), 'utf8'));
+const folderOf = (name) => (name.startsWith('naf/') ? name.slice(4) : null);
+const present = (name) => folderOf(name) !== null && existsSync(join(sources, folderOf(name), 'composer.json'));
 
-// Relative to app/ inside the container; compose mounts these working copies.
-const local = {
-  'naf/board': '../board',
-  'naf/framework': '../nafphp/framework',
-  'naf/cli': '../nafphp/cli',
-  'naf/database': '../nafphp/database',
-  'naf/mcp': '../nafphp/mcp',
-  'naf/oauth-client': '../nafphp/oauth-client',
-  'naf/queue': '../nafphp/queue',
-  'naf/rbac': '../nafphp/rbac',
-  'naf/schedule': '../nafphp/schedule',
-  'naf/websocket': '../nafphp/websocket',
+// The lowest version a constraint accepts, e.g. "^0.2.3" -> [0, 2, 3].
+const floor = (constraint) => (constraint.match(/\d+(\.\d+)*/)?.[0] ?? '0').split('.').map(Number);
+const higher = (left, right) => {
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    if ((left[i] ?? 0) !== (right[i] ?? 0)) return (left[i] ?? 0) > (right[i] ?? 0) ? left : right;
+  }
+
+  return left;
 };
 
-manifest.repositories = [];
-for (const [name, url] of Object.entries(local)) {
-  const wanted = manifest.require[name] ?? boardRequires[name];
-  if (!wanted) continue;
+// Every NAF package the installation needs, following requirements through the
+// working copies themselves, each with the highest floor anybody asks for --
+// the alias has to satisfy all of them at once.
+const floors = new Map();
+const queue = Object.entries(manifest.require);
+while (queue.length > 0) {
+  const [name, constraint] = queue.shift();
+  if (!present(name)) continue;
 
-  manifest.repositories.push({
-    type: 'path',
-    url,
-    options: { symlink: true, versions: { [name]: `${wanted.replace(/^\^/, '')}-dev` } },
-  });
+  const seen = floors.has(name);
+  floors.set(name, seen ? higher(floors.get(name), floor(constraint)) : floor(constraint));
+  if (!seen) queue.push(...Object.entries(read(folderOf(name)).require ?? {}));
 }
+
+manifest.repositories = [...floors].map(([name, version]) => ({
+  type: 'path',
+  // Relative to app/ inside the container, where compose.dev.yaml mounts the sources.
+  url: `../nafphp/${folderOf(name)}`,
+  options: { symlink: true, versions: { [name]: `${version.join('.')}-dev` } },
+}));
 
 manifest['minimum-stability'] = 'dev';
 manifest['prefer-stable'] = true;
 
 writeFileSync(join(root, 'app/composer.dev.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(
-  'composer.dev.json written with path repositories for '
+  `composer.dev.json written with ${manifest.repositories.length} working copies: `
   + manifest.repositories.map((repository) => Object.keys(repository.options.versions)[0]).join(', '),
 );

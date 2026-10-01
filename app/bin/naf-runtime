@@ -27,17 +27,18 @@ if ! command -v docker >/dev/null 2>&1; then
     echo 'Docker is required for this installation. Start Docker or set NAF_CLI_RUNTIME=local explicitly.' >&2
     exit 1
 fi
+# From the project directory, so Compose reads its .env -- COMPOSE_FILE included.
 cd "$project"
 service=${NAF_CLI_SERVICE:-app}
 # Probe failure is an error, never a reason to execute against a different local database.
-running=$(docker compose --project-directory "$project" -f "$project/compose.yaml" ps --status running -q "$service")
+running=$(docker compose --project-directory "$project" ps --status running -q "$service")
 if [ -n "$running" ]; then
     if [ -t 0 ] && [ -t 1 ]; then
-        exec docker compose --project-directory "$project" -f "$project/compose.yaml" exec -w /var/www "$service" php vendor/bin/naf "$@"
+        exec docker compose --project-directory "$project" exec -w /var/www "$service" php vendor/bin/naf "$@"
     fi
-    exec docker compose --project-directory "$project" -f "$project/compose.yaml" exec -T -w /var/www "$service" php vendor/bin/naf "$@"
+    exec docker compose --project-directory "$project" exec -T -w /var/www "$service" php vendor/bin/naf "$@"
 fi
 if [ -t 0 ] && [ -t 1 ]; then
-    exec docker compose --project-directory "$project" -f "$project/compose.yaml" run --rm --no-deps -w /var/www "$service" php vendor/bin/naf "$@"
+    exec docker compose --project-directory "$project" run --rm --no-deps -w /var/www "$service" php vendor/bin/naf "$@"
 fi
-exec docker compose --project-directory "$project" -f "$project/compose.yaml" run --rm --no-deps -T -w /var/www "$service" php vendor/bin/naf "$@"
+exec docker compose --project-directory "$project" run --rm --no-deps -T -w /var/www "$service" php vendor/bin/naf "$@"

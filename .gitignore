@@ -4,7 +4,6 @@
 /app/vendor/
 /app/composer.dev.json
 /app/composer.dev.lock
-/app/.phpunit.cache/
 /app/storage/*
 # Written by `make assets`: naf/board's own stylesheets and scripts at the
 # document root, and every plugin's under its own name. All copies of files
@@ -17,18 +16,9 @@
 /.claude/
 .DS_Store
 
-/app/identity.local.php
-/app/config/*-ca.pem
-
-/.test-storage/
-
-__pycache__/
-*.pyc
-
 /app/logs/
 
 /tools/style/php/vendor/
-/tools/style/web/node_modules/
 /.php-cs-fixer.cache
 
 /docker/rootfs/etc/nginx/ssl/*

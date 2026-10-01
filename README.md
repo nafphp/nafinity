@@ -12,7 +12,7 @@ through. The full extension reference ships with `naf/board`, in its
 
 ## Install
 
-Docker and `make` are all you need.
+Docker, `make` and Node are all you need.
 
 ```sh
 make first-install

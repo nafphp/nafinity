@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+# Composer runs in the container. With compose.dev.yaml active the NAF working
+# copies are mounted, and the development manifest installs them as symlinks;
+# otherwise the installation's own composer.json is all there is.
+compose_files=${COMPOSE_FILE:-$(sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null)}
+case "$compose_files" in
+    *compose.dev.yaml*)
+        node bin/generate-dev-manifest
+        exec docker compose run --rm --no-deps -e COMPOSER=composer.dev.json app composer "$@"
+        ;;
+esac
+exec docker compose run --rm --no-deps app composer "$@"

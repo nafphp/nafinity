@@ -1,102 +1,46 @@
 name: nafinity
-x-runtime: &runtime
-  image: nafinity:dev
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
-    target: development
-  working_dir: /var/www
-  environment: &environment
-    # APP_ENV deliberately absent: the application reads it from app/.env, which
-    # is the file someone can edit. NAF's dotenv only fills gaps, so the test and
-    # candidate services below still win by setting it explicitly.
-    APP_URL: https://localhost:${NAFINITY_HTTPS_PORT:-443}
-    NAFINITY_BACKGROUND_ENABLED: "true"
-    NAFINITY_MAIL_FROM: ${NAFINITY_MAIL_FROM:-notifications@example.test}
-    DB_DRIVER: mysql
-    DB_HOST: db
-    DB_PORT: 3306
-    DB_DATABASE: nafinity
-    DB_USERNAME: nafinity
-    DB_PASSWORD: ${NAFINITY_DB_PASSWORD:?Copy .env.example to .env and set the database passwords}
-    # Live updates over naf/websocket. Off unless an installation says otherwise;
-    # the key signs connect tokens and belongs in .env, not here.
-    WEBSOCKET_ENABLED: ${NAFINITY_WEBSOCKET_ENABLED:-false}
-    WEBSOCKET_KEY: ${NAFINITY_WEBSOCKET_KEY:-}
-    WEBSOCKET_URL: ${NAFINITY_WEBSOCKET_URL:-wss://localhost:8091}
-  volumes:
-    - ./app:/var/www
-    - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro
-    # naf/board is not published yet, so a development install resolves it
-    # from a working copy. Drop this once it is on Packagist.
-    - ${NAF_BOARD_ROOT:-../nafphp/board}:/var/board:ro
-    - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
-  init: true
-  logging:
-    driver: json-file
-    options: {max-size: "10m", max-file: "3"}
 services:
   app:
-    <<: *runtime
+    image: nafinity:dev
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: development
+    working_dir: /var/www
+    environment:
+      # APP_ENV deliberately absent: the application reads it from app/.env, which
+      # is the file someone can edit. NAF's dotenv only fills gaps.
+      APP_URL: https://localhost:${NAFINITY_HTTPS_PORT:-443}
+      NAFINITY_BACKGROUND_ENABLED: "true"
+      NAFINITY_MAIL_FROM: ${NAFINITY_MAIL_FROM:-notifications@example.test}
+      DB_DRIVER: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: nafinity
+      DB_USERNAME: nafinity
+      DB_PASSWORD: ${NAFINITY_DB_PASSWORD:?Copy .env.example to .env and set the database passwords}
+      # Live updates over naf/websocket. Off unless an installation says otherwise;
+      # the key signs connect tokens and belongs in .env, not here.
+      WEBSOCKET_ENABLED: ${NAFINITY_WEBSOCKET_ENABLED:-false}
+      WEBSOCKET_KEY: ${NAFINITY_WEBSOCKET_KEY:-}
+      WEBSOCKET_URL: ${NAFINITY_WEBSOCKET_URL:-wss://localhost:8091}
+    volumes:
+      - ./app:/var/www
+      - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
     ports:
       - "127.0.0.1:${NAFINITY_PORT:-8088}:8080"
       - "127.0.0.1:${NAFINITY_HTTPS_PORT:-443}:8443"
       # naf/websocket listens on a port of its own rather than behind nginx, so
       # it needs one published. Nothing binds it unless websocket:enabled says so.
       - "127.0.0.1:${NAFINITY_WEBSOCKET_PORT:-8091}:8091"
+    init: true
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
       mailpit: {condition: service_started}
-  candidate:
-    image: nafinity:candidate
-    profiles: [candidate]
-    environment:
-      <<: *environment
-      APP_ENV: prod
-      APP_URL: https://localhost:8445
-      NAFINITY_BACKGROUND_ENABLED: "false"
-    ports: ["127.0.0.1:8090:8080", "127.0.0.1:8445:8443"]
-    volumes:
-      - ./app/storage:/var/www/storage
-      - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
-    init: true
-    depends_on:
-      db: {condition: service_healthy}
-      mailpit: {condition: service_started}
-  app-test:
-    <<: *runtime
-    profiles: [test]
-    ports: ["127.0.0.1:8089:8080", "127.0.0.1:8444:8443"]
-    environment:
-      <<: *environment
-      APP_ENV: test
-      APP_URL: https://localhost:8444
-      NAFINITY_BACKGROUND_ENABLED: "false"
-      DB_DATABASE: nafinity_test
-      # Tokens are issued by the web process alone, so the suite can check the
-      # whole issuing path with no socket server anywhere. This key is fixed and
-      # in plain sight on purpose: it signs nothing that leaves this container.
-      WEBSOCKET_ENABLED: "true"
-      WEBSOCKET_KEY: a-key-for-the-test-container-only
-    volumes:
-      - ./app:/var/www
-      - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro
-      # naf/board is not published yet, so a development install resolves it
-      # from a working copy. Drop this once it is on Packagist.
-      - ${NAF_BOARD_ROOT:-../nafphp/board}:/var/board:ro
-      - ./.test-storage:/var/www/storage
-      - ./docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
-      # The extension checks build throwaway hosts under work/ and run them here.
-      # They used to get a container of their own per step, which costs a
-      # container start each; with the project mounted they run in this one.
-      # Those hosts ask for ../../../nafphp, which is why the packages are
-      # mounted under that name above: the same text has to reach the same
-      # checkout in here as it does outside.
-      - .:/var/project
-    depends_on:
-      db: {condition: service_healthy}
-      mailpit: {condition: service_started}
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
   mailpit:
     image: axllent/mailpit:v1.31.1
     ports: ["127.0.0.1:${NAFINITY_MAILPIT_PORT:-8025}:8025"]
@@ -123,18 +67,5 @@ services:
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "3"}
-  postgres:
-    image: postgres:17
-    profiles: [test]
-    environment:
-      POSTGRES_USER: nafinity
-      POSTGRES_PASSWORD: ${NAFINITY_DB_PASSWORD}
-      POSTGRES_DB: nafinity_test
-    tmpfs: [/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nafinity -d nafinity_test"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 volumes:
   database:
