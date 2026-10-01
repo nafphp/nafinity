@@ -13,7 +13,7 @@ case "$backup_dir" in
 esac
 
 # Pause only this Compose project's writers while taking the matching DB/files snapshot.
-writer_ids=$(docker compose ps -q app candidate)
+writer_ids=$(docker compose ps -q app)
 resume_writers() {
     if [ -n "$writer_ids" ]; then
         docker unpause $writer_ids >/dev/null
@@ -28,14 +28,32 @@ fi
 
 docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-dump -uroot --single-transaction --quick --hex-blob nafinity' > "$backup_dir/database.sql"
 tar -czf "$backup_dir/storage.tar.gz" -C app storage
-# A digest per part, so a restore can tell a truncated copy from a whole one.
+# A digest per part, so a restore can tell a truncated copy from a whole one,
+# and one per attachment as it was at this moment, so a restore is compared
+# with the backup rather than with whatever the files have become since.
 node -e '
 const { createHash } = require("node:crypto");
-const { readFileSync, writeFileSync } = require("node:fs");
+const { readFileSync, readdirSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 const root = process.argv[1];
-const digest = (name) => createHash("sha256").update(readFileSync(join(root, name))).digest("hex");
-const manifest = Object.fromEntries(["database.sql", "storage.tar.gz"].map((n) => [n, digest(n)]));
-writeFileSync(join(root, "checksums.json"), JSON.stringify(manifest, null, 2) + "\n");
+const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+const under = (directory, prefix = "") => {
+  const found = {};
+  let entries = [];
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of entries) {
+    const name = prefix === "" ? entry.name : prefix + "/" + entry.name;
+    if (entry.isDirectory()) Object.assign(found, under(join(directory, entry.name), name));
+    else if (entry.isFile()) found[name] = digest(join(directory, entry.name));
+  }
+  return found;
+};
+const parts = Object.fromEntries(["database.sql", "storage.tar.gz"].map((n) => [n, digest(join(root, n))]));
+writeFileSync(join(root, "checksums.json"), JSON.stringify(parts, null, 2) + "\n");
+writeFileSync(join(root, "attachments.json"), JSON.stringify(under("app/storage/attachments"), null, 2) + "\n");
 ' "$backup_dir"
 echo "Backup created: $backup_dir"
