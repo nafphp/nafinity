@@ -69,6 +69,27 @@ return [
         'tokens'      => ['store' => false],
     ],
 
+    // Signing in against a company directory, off until somebody configures one.
+    // Uncomment and fill in your own; the password stays in the environment and
+    // the CA file has to be readable inside the container. An OpenID Connect
+    // login goes under auth:logins further down.
+    //
+    // 'ldap' => [
+    //     'enabled'    => true,
+    //     'directory'  => 'company',
+    //     'connection' => [
+    //         'url'               => 'ldaps://directory.example.test:636',
+    //         'baseDn'            => 'ou=people,dc=example,dc=test',
+    //         'bindDn'            => 'uid=search,ou=services,dc=example,dc=test',
+    //         'bindPassword'      => 'ENV:LDAP_BIND_PASSWORD',
+    //         'caFile'            => BASE_PATH . '/storage/directory-ca.pem',
+    //         'usernameAttribute' => 'mail',
+    //         'subjectAttribute'  => 'entryUUID',
+    //         'allowedFilter'     => '(objectClass=inetOrgPerson)',
+    //         'timeout'           => 5,
+    //     ],
+    // ],
+
     // ---------------------------------------------------------------------
     // What naf/board needs to work. Change these only with the board in mind.
 
@@ -80,6 +101,13 @@ return [
             'password_field' => 'password_hash',
         ],
         'session' => true,
+        // 'logins' => ['company' => [
+        //     'driver'        => 'oidc',
+        //     'label'         => 'Firmenkonto',
+        //     'issuer'        => 'https://issuer.example.test',
+        //     'client_id'     => 'ENV:OIDC_CLIENT_ID',
+        //     'client_secret' => 'ENV:OIDC_CLIENT_SECRET',
+        // ]],
     ],
 
     // Ticket attachments. The path is inside this installation's storage.
