@@ -42,8 +42,10 @@ return [
     'csrf_validation' => true,
 
     // Off by default: an installation that delivers mail should say so
-    // deliberately, and say who it comes from.
+    // deliberately, and say who it comes from. The transport is PHP's mail(),
+    // which the image hands to msmtp; docker/rootfs/etc/msmtprc says where to.
     'nafinity' => ['mail_enabled' => false, 'mail_from' => 'ENV:NAFINITY_MAIL_FROM'],
+    'mail'     => ['transport' => MailTransport::class],
 
     /*
      * Live updates. Off by default: the pages work without them, so an
@@ -58,8 +60,11 @@ return [
         'enabled' => 'ENV:WEBSOCKET_ENABLED',
         'key'     => 'ENV:WEBSOCKET_KEY',
         'url'     => 'ENV:WEBSOCKET_URL',
+        // Exactly the origins a browser may connect from, as it sends them: no
+        // path, and no port where it is the scheme's default. Empty allows every
+        // origin, which is fine on localhost and should not go beyond it.
+        // 'origins' => ['https://board.example.test'],
     ],
-    'mail' => ['transport' => MailTransport::class],
 
     // Only reached once a provider is configured. auto_register stays false so an
     // external account cannot create a local one by signing in.
@@ -124,7 +129,7 @@ return [
     'queue'    => ['heartbeat_file' => '/tmp/nafinity-worker-heartbeat'],
     'schedule' => ['heartbeat_file' => '/tmp/nafinity-ticker-heartbeat'],
 
-    // Where this installation's own templates go. A file here wins over the
-    // board's; src/ first, matching how naf/framework orders its VIEW_PATHS.
-    'view' => ['paths' => ['src/views', 'app/views']],
+    // Where this installation's own templates go, relative to app/. A file here
+    // wins over the board's.
+    'view' => ['paths' => ['src/views']],
 ];

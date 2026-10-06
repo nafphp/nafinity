@@ -11,5 +11,9 @@ indent_size = 4
 [*.{js,css,json,yml,yaml}]
 indent_size = 2
 
+# The Node scripts in bin/, which carry no extension.
+[bin/{certificate-is-current,generate-certificates,generate-dev-manifest,init-env,style}]
+indent_size = 2
+
 [*.md]
 trim_trailing_whitespace = false

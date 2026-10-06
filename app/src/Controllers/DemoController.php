@@ -28,8 +28,9 @@ final class DemoController
     public function index(): ResponseInterface
     {
         return $this->pages->render('demo', [
-            'heading' => 'Your own page',
-            'file'    => 'app/src/Controllers/DemoController.php',
+            // The layout names the browser tab and the header after it.
+            'title' => 'Your own page',
+            'file'  => 'app/src/Controllers/DemoController.php',
         ]);
     }
 }

@@ -57,7 +57,7 @@ does that when it finds them beside this project): their working copies under
 as a symlink through `app/composer.dev.json`. `composer.json` itself stays clean of path
 repositories, because it describes a real installation.
 
-`docker build --target production -f docker/Dockerfile` builds the image that ships: dependencies from Packagist,
+`docker build --target production -f docker/Dockerfile .` builds the image that ships: dependencies from Packagist,
 the packages' public files published into `public/`, no Composer and no source mounts.
 
 ## Never committed

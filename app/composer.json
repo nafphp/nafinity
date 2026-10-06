@@ -8,9 +8,6 @@
         "naf/board": "^0.1.5",
         "naf/websocket": "^0.1.0"
     },
-    "require-dev": {
-        "phpunit/phpunit": "^12.1"
-    },
     "autoload": {
         "psr-4": {
             "Nafinity\\": "src/"

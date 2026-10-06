@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-curl --fail --silent --show-error --cacert /etc/nginx/ssl/ca.pem \
+# Only whether this container answers. The certificate is whatever the deployment
+# mounted -- issued for its public name, and with no ca.pem beside it -- so
+# verifying it here would fail every installation outside development.
+curl --fail --silent --show-error --insecure \
     https://localhost:8443/health/live >/dev/null
 
 if [ "${NAFINITY_BACKGROUND_ENABLED:-true}" = true ]; then
