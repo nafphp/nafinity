@@ -1,0 +1,57 @@
+{
+  "recorded_at": "2026-10-06T18:39:02Z",
+  "transport": "verified localhost HTTPS, PHP-FPM, OPcache enabled, 10 warmups, 50 sequential requests and 4 independent sessions \u00d7 30 requests",
+  "dataset": "isolated production seed, 8 tickets, no benchmark bulk inserts",
+  "hosts": [
+    {
+      "host": "production",
+      "requests": 50,
+      "p50_ms": 10.6,
+      "p95_ms": 15.91,
+      "boot_p50_ms": 2.524,
+      "boot_p95_ms": 3.022,
+      "queries_min_max": [
+        23,
+        23
+      ],
+      "response_bytes_min_max": [
+        107385,
+        107385
+      ],
+      "peak_memory_bytes": 2097152,
+      "concurrency": 4,
+      "parallel_requests": 120,
+      "throughput_rps": 297.04,
+      "parallel_p50_ms": 12.12,
+      "parallel_p95_ms": 18.31,
+      "acceptance": {
+        "login": true,
+        "foreign_project_404": true,
+        "private_download_byte_exact": true,
+        "foreign_download_404": true
+      }
+    },
+    {
+      "host": "dev_mount",
+      "requests": 50,
+      "p50_ms": 17.99,
+      "p95_ms": 22.45,
+      "boot_p50_ms": 7.671,
+      "boot_p95_ms": 9.633,
+      "queries_min_max": [
+        23,
+        23
+      ],
+      "response_bytes_min_max": [
+        107389,
+        107389
+      ],
+      "peak_memory_bytes": 2097152,
+      "concurrency": 4,
+      "parallel_requests": 120,
+      "throughput_rps": 132.97,
+      "parallel_p50_ms": 29.71,
+      "parallel_p95_ms": 39.53
+    }
+  ]
+}

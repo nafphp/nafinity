@@ -10,7 +10,6 @@ $finder = Finder::create()
     ->name('*.php')
     ->name('*.phtml')
     ->exclude(['vendor', 'storage', 'logs'])
-    ->notName('identity.local.php')
     ->append([__FILE__]);
 
 return (new Config())

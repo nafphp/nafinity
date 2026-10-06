@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-10-06T19:31:29Z",
+  "same_cell_cards": 5004,
+  "runs_per_version": 5,
+  "before_board": "0.1.4",
+  "after_board": "0.1.5",
+  "before_p50_ms": 389.03,
+  "after_p50_ms": 108.23,
+  "before_p95_ms": 394.57,
+  "after_p95_ms": 119.51,
+  "before_sql_statements": 10038,
+  "after_sql_statements": 72,
+  "p50_reduction_percent": 72.18,
+  "sql_reduction_percent": 99.28,
+  "note": "Final after series ran after local documentation checks finished. Only disposable probe limiter state was reset between repetitions; limit rules remained enabled. Every request retained unique requested order and each of 20 same-version pairs yielded 200/409."
+}

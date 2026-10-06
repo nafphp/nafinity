@@ -1,6 +1,6 @@
 # Idee: optionales Core-Caching über naf/cache
 
-Status: Entwurf, bewusst zurückgestellt; keine Implementierung oder Release-Zusage.
+Status: nach erneuter Messung am 6.10.2026 bewusst zurückgestellt; kein Cache-Paket erforderlich.
 Festgehalten am 22.09.2026.
 
 ## Ziel
@@ -76,3 +76,23 @@ Konkreter früher Erweiterungspunkt, Artefaktformat und Ablageort, Build-Integra
 Diagnose-/Prüfkommandos, Vertrag für weitere Cache-Erzeuger und Anwendungscache-Backends.
 Erst den Plugin-Katalog umsetzen und messen; weitere Caches nur mit klaren
 Invalidierungsregeln ergänzen.
+
+## Entscheidung am 6. Oktober 2026
+
+Die vollständige Messreihe liegt unter [`benchmarks/2026-10-06`](benchmarks/2026-10-06/).
+0, 10, 25, 50, 100 und 250 synthetische Plugins wurden getrennt nach Discovery,
+Manifestzugriff, Reihenfolge, Ressourcen und frischem Bootstrap gemessen. Bei 25
+Plugins auf dem Container-Dateisystem brauchen Manifestzugriff/Reihenfolge im Median
+0,115 ms und Ressourcensuche 0,153 ms; der frische CLI-Boot 1,52 ms.
+250 Plugins brauchen 10,97 ms Boot statt 47,31 ms über Entwicklungs-Mounts.
+
+Im realen Produktionshost mit OPcache liegt der HTTP-Boot im Median bei rund 2–2,5 ms.
+Ein persistenter Katalog würde derzeit wenig dieser Zeit sparen, benötigt aber weiterhin
+Invalidierung, Build-/Rollback-Integration und einen zusätzlichen öffentlichen Vertrag.
+Die vorhandene verzögerte Event-Sortierung funktioniert bereits: bei 500 Listenern
+0,143 ms erster Dispatch und 0,031 ms warmer Dispatch auf dem Container-Dateisystem.
+
+Der größere gemessene Hebel ist das Karten-Rebalancing mit über 10.000 SQL-Anweisungen
+bei 5.000 Karten. Deshalb wird dieser Pfad optimiert. Die Cache-Idee bleibt als Entwurf
+erhalten und wird bei größeren realen Plugin-Katalogen oder nachweisbar höherem Boot-Anteil
+neu beurteilt. Es gibt keinen neuen frühen Cache-Erweiterungspunkt in diesem Durchgang.

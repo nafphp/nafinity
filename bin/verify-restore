@@ -11,6 +11,12 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const root = process.argv[1];
 const expected = JSON.parse(readFileSync(join(root, "checksums.json"), "utf8"));
+const required = ["database.sql", "storage.tar.gz"];
+if (!expected || Array.isArray(expected) || Object.keys(expected).length !== required.length
+  || required.some((name) => !Object.hasOwn(expected, name)
+    || !/^[a-f0-9]{64}$/.test(expected[name]))) {
+  throw new Error("Backup manifest must contain both complete SHA-256 digests");
+}
 for (const [name, digest] of Object.entries(expected)) {
   if (!["database.sql", "storage.tar.gz"].includes(name)) {
     throw new Error("Unexpected entry in the manifest: " + name);
@@ -26,39 +32,46 @@ restore_files=$(mktemp -d "${TMPDIR:-/tmp}/nafinity-restore.XXXXXX")
 trap 'rm -rf "$restore_files"' EXIT HUP INT TERM
 tar -xzf "$restore_backup/storage.tar.gz" -C "$restore_files"
 docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -uroot -N -e "SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=\"nafinity_restore_test\" ORDER BY TABLE_NAME; SELECT COUNT(*) FROM nafinity_restore_test.users; SELECT COUNT(*) FROM nafinity_restore_test.tickets; SELECT COUNT(*) FROM nafinity_restore_test.migrations;"'
-# Every restored file, byte for byte against the one it came from.
+# Every restored file, byte for byte against what the backup recorded.
 node -e '
 const { createHash } = require("node:crypto");
 const { readFileSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 
-const digestsUnder = (directory, prefix = "") => {
-  const found = {};
-  let entries;
+const [backup, restoredRoot] = process.argv.slice(1);
+const recorded = JSON.parse(readFileSync(join(backup, "attachments.json"), "utf8"));
+const missing = [];
+const changed = [];
+const extra = [];
+const findExtra = (directory, prefix = "") => {
+  let entries = [];
   try {
     entries = readdirSync(directory, { withFileTypes: true });
   } catch {
-    return found;
+    return;
   }
   for (const entry of entries) {
     const name = prefix === "" ? entry.name : prefix + "/" + entry.name;
-    if (entry.isDirectory()) Object.assign(found, digestsUnder(join(directory, entry.name), name));
-    else if (entry.isFile()) {
-      found[name] = createHash("sha256").update(readFileSync(join(directory, entry.name))).digest("hex");
-    }
+    if (entry.isDirectory()) findExtra(join(directory, entry.name), name);
+    else if (entry.isFile() && !Object.hasOwn(recorded, name)) extra.push(name);
   }
-  return found;
 };
-
-const original = digestsUnder("app/storage/attachments");
-const restored = digestsUnder(join(process.argv[1], "storage/attachments"));
-const same = JSON.stringify(Object.entries(original).sort()) === JSON.stringify(Object.entries(restored).sort());
-if (!same) {
-  throw new Error(
-    "Attachment snapshot differs from current files; rerun with writers stopped"
-      + " or verify against a backup-time manifest.",
-  );
+findExtra(join(restoredRoot, "storage/attachments"));
+for (const [name, digest] of Object.entries(recorded)) {
+  let contents;
+  try {
+    contents = readFileSync(join(restoredRoot, "storage/attachments", name));
+  } catch {
+    missing.push(name);
+    continue;
+  }
+  if (createHash("sha256").update(contents).digest("hex") !== digest) changed.push(name);
 }
-console.log("Restored attachment hashes match:", Object.keys(restored).length, "files");
-' "$restore_files"
+if (missing.length > 0 || changed.length > 0 || extra.length > 0) {
+  throw new Error("Restored attachments differ from the backup: " + missing.length + " missing, "
+    + changed.length + " changed, " + extra.length + " unexpected ("
+    + [...missing, ...changed, ...extra].slice(0, 5).join(", ") + ")");
+}
+console.log("Restored attachment hashes match:", Object.keys(recorded).length, "files");
+' "$restore_backup" "$restore_files"
 echo 'Restore probe completed in nafinity_restore_test; the running application was not overwritten.'

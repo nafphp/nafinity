@@ -1,0 +1,59 @@
+{
+  "recorded_at": "2026-10-06T19:31:29Z",
+  "transport": "verified localhost HTTPS, PHP-FPM, OPcache enabled, 10 warmups, 50 sequential requests and 4 independent sessions \u00d7 30 requests",
+  "dataset": "5,000 owned bulk cards plus seed and three rebalance cards",
+  "hosts": [
+    {
+      "host": "production",
+      "requests": 50,
+      "p50_ms": 27.72,
+      "p95_ms": 29.83,
+      "boot_p50_ms": 1.994,
+      "boot_p95_ms": 2.415,
+      "queries_min_max": [
+        23,
+        23
+      ],
+      "response_bytes_min_max": [
+        546196,
+        546196
+      ],
+      "peak_memory_bytes": 4194304,
+      "concurrency": 4,
+      "parallel_requests": 120,
+      "throughput_rps": 121.2,
+      "parallel_p50_ms": 31.68,
+      "parallel_p95_ms": 40.24,
+      "acceptance": {
+        "login": true,
+        "foreign_project_404": true,
+        "private_download_byte_exact": true,
+        "foreign_download_404": true,
+        "filtered_drag_lock": true,
+        "truncated_drag_lock": true
+      }
+    },
+    {
+      "host": "dev_mount",
+      "requests": 50,
+      "p50_ms": 42.68,
+      "p95_ms": 48.5,
+      "boot_p50_ms": 7.704,
+      "boot_p95_ms": 9.79,
+      "queries_min_max": [
+        23,
+        23
+      ],
+      "response_bytes_min_max": [
+        546200,
+        546200
+      ],
+      "peak_memory_bytes": 4194304,
+      "concurrency": 4,
+      "parallel_requests": 120,
+      "throughput_rps": 74.32,
+      "parallel_p50_ms": 51.41,
+      "parallel_p95_ms": 65.2
+    }
+  ]
+}

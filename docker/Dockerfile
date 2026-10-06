@@ -26,10 +26,19 @@ RUN apk add --no-cache composer git
 COPY docker/development/rootfs/ /
 USER www
 
-# Vendor must be prepared by a verified distribution install; never copy Source-mode links.
-FROM runtime AS production
+# The installation as it ships: dependencies from the published packages (from
+# app/composer.lock when there is one), their public files copied into public/,
+# and no Composer left in the image.
+FROM runtime AS build
+USER root
+RUN apk add --no-cache composer
+USER www
 COPY --chown=www:www app/ /var/www/
+# The board refuses to boot without database settings; publishing never connects.
+RUN composer install --no-dev --no-interaction --no-progress --classmap-authoritative \
+    && mkdir -p storage/sessions storage/logs storage/attachments storage/queue storage/schedule storage/oauth \
+    && DB_DRIVER=mysql DB_HOST=unused DB_DATABASE=unused DB_USERNAME=unused DB_PASSWORD=unused \
+        php vendor/bin/naf nafinity:assets:publish
 
-RUN test -f composer.lock && test -f vendor/.nafinity-distribution \
-    && test -z "$(find vendor -type l -print -quit)" \
-    && mkdir -p storage/sessions storage/logs storage/attachments storage/queue storage/schedule storage/oauth
+FROM runtime AS production
+COPY --from=build --chown=www:www /var/www /var/www

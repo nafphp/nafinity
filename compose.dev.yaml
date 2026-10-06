@@ -1,0 +1,11 @@
+# Developing the NAF packages themselves, with their working copies installed
+# as symlinks instead of the releases from Packagist.
+#
+# Switched on by COMPOSE_FILE=compose.yaml:compose.dev.yaml in .env, which
+# bin/init-env writes when it finds the packages beside this project. The
+# checkouts sit under NAF_SOURCE_ROOT; bin/composer turns every one the
+# installation requires into a path repository of app/composer.dev.json.
+services:
+  app:
+    volumes:
+      - ${NAF_SOURCE_ROOT:-../nafphp}:/var/nafphp:ro

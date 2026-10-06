@@ -3,7 +3,7 @@
  * Create the private local Compose environment without replacing existing settings.
  */
 import { randomBytes } from 'node:crypto';
-import { closeSync, openSync, readFileSync, writeSync, constants } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, writeSync, constants } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,9 +34,17 @@ function create(target, contents, made, kept) {
 }
 
 // The project environment: what Compose needs to bring the services up.
-const template = readFileSync(join(root, '.env.example'), 'utf8')
+let template = readFileSync(join(root, '.env.example'), 'utf8')
   .replace('replace-with-a-local-password', randomBytes(24).toString('hex'))
   .replace('replace-with-a-different-local-password', randomBytes(24).toString('hex'));
+
+// Beside the NAF working copies this is a development checkout of the packages
+// themselves, and they are installed from there rather than from Packagist.
+if (existsSync(join(root, '../nafphp/framework/composer.json'))) {
+  template = template
+    .replace('#COMPOSE_FILE=compose.yaml:compose.dev.yaml', 'COMPOSE_FILE=compose.yaml:compose.dev.yaml')
+    .replace('#NAF_SOURCE_ROOT=../nafphp', 'NAF_SOURCE_ROOT=../nafphp');
+}
 
 create(
   join(root, '.env'),

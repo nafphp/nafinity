@@ -1,0 +1,17 @@
+{
+  "recorded_at": "2026-10-06T18:50:32Z",
+  "dataset": "isolated 5,000-card bulk cell plus seed and three owned rebalance cards",
+  "same_version_pairs": 20,
+  "requests": 40,
+  "successes": 20,
+  "stale_conflicts": 20,
+  "forced_conflict_rate": 0.5,
+  "note": "Deliberately identical stale versions, not an estimate of natural user conflicts. Global InnoDB wait counter is shared with the isolated idle worker.",
+  "move_p50_ms": 10.63,
+  "move_p95_ms": 13.15,
+  "innodb_row_lock_wait_delta_ms": 33,
+  "controlled_250_ms_holder_response_ms": 280.68,
+  "forced_rebalance_response_ms": 377.3,
+  "forced_rebalance_sql_statements": 10038,
+  "unique_requested_order": true
+}

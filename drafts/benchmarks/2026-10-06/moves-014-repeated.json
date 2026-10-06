@@ -1,0 +1,52 @@
+{
+  "recorded_at": "2026-10-06T19:07:13Z",
+  "dataset": "isolated 5,000-card bulk cell plus seed and three owned rebalance cards",
+  "same_version_pairs": 20,
+  "requests": 40,
+  "successes": 20,
+  "stale_conflicts": 20,
+  "forced_conflict_rate": 0.5,
+  "note": "Deliberately identical stale versions, not an estimate of natural user conflicts. Global InnoDB wait counter is shared with the isolated idle worker.",
+  "move_p50_ms": 10.25,
+  "move_p95_ms": 11.71,
+  "innodb_row_lock_wait_delta_ms": 31,
+  "controlled_250_ms_holder_response_ms": 266.9,
+  "forced_rebalance_response_ms": 389.03,
+  "forced_rebalance_sql_statements": 10038,
+  "unique_requested_order": true,
+  "rebalance_cell_cards": 5004,
+  "rebalance_runs": 5,
+  "rebalance_p50_ms": 389.03,
+  "rebalance_p95_ms": 394.57,
+  "rebalance_queries_min_max": [
+    10038,
+    10038
+  ],
+  "rebalance_samples": [
+    {
+      "status": 200,
+      "ms": 388.749083,
+      "queries": 10038
+    },
+    {
+      "status": 200,
+      "ms": 394.57416700000005,
+      "queries": 10038
+    },
+    {
+      "status": 200,
+      "ms": 386.4786249999996,
+      "queries": 10038
+    },
+    {
+      "status": 200,
+      "ms": 389.03779199999985,
+      "queries": 10038
+    },
+    {
+      "status": 200,
+      "ms": 389.0313750000001,
+      "queries": 10038
+    }
+  ]
+}
