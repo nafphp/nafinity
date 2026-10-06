@@ -1,8 +1,8 @@
 # Nafinity deployment measurements, 6 October 2026
 
 This is a dated acceptance record. It is not a latency promise or a production capacity estimate.
-Results are in [benchmarks/2026-10-06](benchmarks/2026-10-06/); the portable harness is in
-[tools/benchmarks](../tools/benchmarks/). Backups, cookies, certificates, environments and generated
+Results are in [results/2026-10-06](results/2026-10-06/); the portable harness is in
+[tools/benchmarks](./). Backups, cookies, certificates, environments and generated
 fixture packages are excluded. AI measurements and model digests live in the Board package's
 `tests/benchmarks/results/2026-10-06.json`.
 
@@ -84,7 +84,10 @@ catalog. `core-benchmark.php` refuses to overwrite a nonempty scratch directory 
 ## Decisions
 
 The production filesystem and OPcache provide the main boot improvement. A persistent core
-catalog is deferred with reasons in [optional-core-cache.md](optional-core-cache.md).
+catalog is deferred: at 25 plugins, manifest/order and resource discovery together take
+about 0.27 ms on the container filesystem; real HTTP boot takes around 2–2.5 ms. This does
+not justify an additional cache, invalidation and build/rollback contract. Reconsider only
+when a larger real catalog or higher measured boot cost changes that balance.
 Rebalancing was the concrete SQL bottleneck and was optimized in the Board package. Query/card
 payload limits and the existing project lock remain; ordinary moves already take around 11 ms.
 Native Chrome/Firefox dragging still needs manual acceptance because the desktop input tool
