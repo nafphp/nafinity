@@ -11,6 +11,12 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const root = process.argv[1];
 const expected = JSON.parse(readFileSync(join(root, "checksums.json"), "utf8"));
+const required = ["database.sql", "storage.tar.gz"];
+if (!expected || Array.isArray(expected) || Object.keys(expected).length !== required.length
+  || required.some((name) => !Object.hasOwn(expected, name)
+    || !/^[a-f0-9]{64}$/.test(expected[name]))) {
+  throw new Error("Backup manifest must contain both complete SHA-256 digests");
+}
 for (const [name, digest] of Object.entries(expected)) {
   if (!["database.sql", "storage.tar.gz"].includes(name)) {
     throw new Error("Unexpected entry in the manifest: " + name);
@@ -36,6 +42,21 @@ const [backup, restoredRoot] = process.argv.slice(1);
 const recorded = JSON.parse(readFileSync(join(backup, "attachments.json"), "utf8"));
 const missing = [];
 const changed = [];
+const extra = [];
+const findExtra = (directory, prefix = "") => {
+  let entries = [];
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const name = prefix === "" ? entry.name : prefix + "/" + entry.name;
+    if (entry.isDirectory()) findExtra(join(directory, entry.name), name);
+    else if (entry.isFile() && !Object.hasOwn(recorded, name)) extra.push(name);
+  }
+};
+findExtra(join(restoredRoot, "storage/attachments"));
 for (const [name, digest] of Object.entries(recorded)) {
   let contents;
   try {
@@ -46,9 +67,10 @@ for (const [name, digest] of Object.entries(recorded)) {
   }
   if (createHash("sha256").update(contents).digest("hex") !== digest) changed.push(name);
 }
-if (missing.length > 0 || changed.length > 0) {
+if (missing.length > 0 || changed.length > 0 || extra.length > 0) {
   throw new Error("Restored attachments differ from the backup: " + missing.length + " missing, "
-    + changed.length + " changed (" + [...missing, ...changed].slice(0, 5).join(", ") + ")");
+    + changed.length + " changed, " + extra.length + " unexpected ("
+    + [...missing, ...changed, ...extra].slice(0, 5).join(", ") + ")");
 }
 console.log("Restored attachment hashes match:", Object.keys(recorded).length, "files");
 ' "$restore_backup" "$restore_files"

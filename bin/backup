@@ -27,7 +27,8 @@ if [ -n "$writer_ids" ]; then
 fi
 
 docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-dump -uroot --single-transaction --quick --hex-blob nafinity' > "$backup_dir/database.sql"
-tar -czf "$backup_dir/storage.tar.gz" -C app storage
+# Avoid macOS metadata becoming extra attachment files on Linux restores.
+COPYFILE_DISABLE=1 tar -czf "$backup_dir/storage.tar.gz" -C app storage
 # A digest per part, so a restore can tell a truncated copy from a whole one,
 # and one per attachment as it was at this moment, so a restore is compared
 # with the backup rather than with whatever the files have become since.

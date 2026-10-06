@@ -1,0 +1,291 @@
+{
+  "recorded_at": "2026-10-06T18:28:43+00:00",
+  "php": "8.5.10",
+  "os": "Darwin",
+  "opcache_cli": "0",
+  "kind": "synthetic plugin chain; CLI boot, not HTTP",
+  "plugins": [
+    {
+      "count": 0,
+      "composer_discovery": {
+        "p50_ms": 0.0007,
+        "p95_ms": 0.0008,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 0,
+        "p95_ms": 0.0001,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 0.0002,
+        "p95_ms": 0.0003,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 0.0003,
+        "p95_ms": 0.0003,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 0.5329,
+        "p95_ms": 0.8761,
+        "runs": 20,
+        "peak_memory_bytes": 2097152
+      }
+    },
+    {
+      "count": 10,
+      "composer_discovery": {
+        "p50_ms": 0.0009,
+        "p95_ms": 0.001,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 0.0922,
+        "p95_ms": 0.1062,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 0.0084,
+        "p95_ms": 0.0086,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 0.1591,
+        "p95_ms": 0.1743,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 0.0618,
+        "p95_ms": 0.0778,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 1.6618,
+        "p95_ms": 2.1915,
+        "runs": 20,
+        "peak_memory_bytes": 2097152
+      }
+    },
+    {
+      "count": 25,
+      "composer_discovery": {
+        "p50_ms": 0.0013,
+        "p95_ms": 0.0014,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 0.2308,
+        "p95_ms": 0.3264,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 0.0237,
+        "p95_ms": 0.0268,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 0.388,
+        "p95_ms": 0.5239,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 0.1707,
+        "p95_ms": 0.2455,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 3.1089,
+        "p95_ms": 3.7707,
+        "runs": 20,
+        "peak_memory_bytes": 2097152
+      }
+    },
+    {
+      "count": 50,
+      "composer_discovery": {
+        "p50_ms": 0.0018,
+        "p95_ms": 0.002,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 0.4592,
+        "p95_ms": 0.6731,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 0.0743,
+        "p95_ms": 0.0881,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 0.823,
+        "p95_ms": 1.0338,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 0.3475,
+        "p95_ms": 0.4292,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 5.6468,
+        "p95_ms": 6.2893,
+        "runs": 20,
+        "peak_memory_bytes": 2097152
+      }
+    },
+    {
+      "count": 100,
+      "composer_discovery": {
+        "p50_ms": 0.003,
+        "p95_ms": 0.0034,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 0.92,
+        "p95_ms": 1.3138,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 0.2095,
+        "p95_ms": 0.2387,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 1.8072,
+        "p95_ms": 2.5258,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 0.7258,
+        "p95_ms": 1.327,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 10.7583,
+        "p95_ms": 12.0873,
+        "runs": 20,
+        "peak_memory_bytes": 2097152
+      }
+    },
+    {
+      "count": 250,
+      "composer_discovery": {
+        "p50_ms": 0.0065,
+        "p95_ms": 0.0088,
+        "runs": 51
+      },
+      "manifest_read": {
+        "p50_ms": 2.5962,
+        "p95_ms": 3.3845,
+        "runs": 51
+      },
+      "pure_order": {
+        "p50_ms": 1.0575,
+        "p95_ms": 1.2842,
+        "runs": 51
+      },
+      "manifest_and_order": {
+        "p50_ms": 5.596,
+        "p95_ms": 6.0527,
+        "runs": 51
+      },
+      "resources": {
+        "p50_ms": 2.0905,
+        "p95_ms": 3.4217,
+        "runs": 51
+      },
+      "fresh_boot": {
+        "p50_ms": 26.8854,
+        "p95_ms": 43.0458,
+        "runs": 20,
+        "peak_memory_bytes": 4194304
+      }
+    }
+  ],
+  "events": [
+    {
+      "count": 0,
+      "register": {
+        "p50_ms": 0,
+        "p95_ms": 0.0001,
+        "runs": 51
+      },
+      "first_dispatch": {
+        "p50_ms": 0,
+        "p95_ms": 0.0001,
+        "runs": 51,
+        "includes_registration": false
+      },
+      "warm_dispatch": {
+        "p50_ms": 0,
+        "p95_ms": 0.0001,
+        "runs": 51
+      }
+    },
+    {
+      "count": 10,
+      "register": {
+        "p50_ms": 0.0008,
+        "p95_ms": 0.0009,
+        "runs": 51
+      },
+      "first_dispatch": {
+        "p50_ms": 0.0014,
+        "p95_ms": 0.002,
+        "runs": 51,
+        "includes_registration": false
+      },
+      "warm_dispatch": {
+        "p50_ms": 0.0006,
+        "p95_ms": 0.0007,
+        "runs": 51
+      }
+    },
+    {
+      "count": 100,
+      "register": {
+        "p50_ms": 0.0074,
+        "p95_ms": 0.0091,
+        "runs": 51
+      },
+      "first_dispatch": {
+        "p50_ms": 0.025,
+        "p95_ms": 0.0258,
+        "runs": 51,
+        "includes_registration": false
+      },
+      "warm_dispatch": {
+        "p50_ms": 0.0053,
+        "p95_ms": 0.0058,
+        "runs": 51
+      }
+    },
+    {
+      "count": 500,
+      "register": {
+        "p50_ms": 0.0433,
+        "p95_ms": 0.0488,
+        "runs": 51
+      },
+      "first_dispatch": {
+        "p50_ms": 0.1508,
+        "p95_ms": 0.1699,
+        "runs": 51,
+        "includes_registration": false
+      },
+      "warm_dispatch": {
+        "p50_ms": 0.0284,
+        "p95_ms": 0.0293,
+        "runs": 51
+      }
+    }
+  ]
+}

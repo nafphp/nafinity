@@ -1,0 +1,48 @@
+name: nafinity-acceptance
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: nafinity_probe
+      MARIADB_USER: probe
+      MARIADB_PASSWORD: probe-local-only
+      MARIADB_ROOT_PASSWORD: root-probe-local-only
+    volumes: [probe-db:/var/lib/mysql]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    image: nafinity:production-probe
+    environment:
+      APP_ENV: prod
+      APP_URL: https://localhost:38543
+      DB_DRIVER: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: nafinity_probe
+      DB_USERNAME: probe
+      DB_PASSWORD: probe-local-only
+      NAFINITY_BACKGROUND_ENABLED: 'true'
+      WEBSOCKET_ENABLED: 'false'
+    volumes:
+      - probe-storage:/var/www/storage
+      - ./http-metrics.php:/var/www/src/extensions.php:ro
+      - ../../docker/rootfs/etc/nginx/ssl:/etc/nginx/ssl:ro
+    ports: ['127.0.0.1:38543:8443']
+    depends_on:
+      db: {condition: service_healthy}
+  dev:
+    extends: {service: app}
+    image: nafinity:dev
+    environment:
+      APP_URL: https://localhost:38544
+      NAFINITY_BACKGROUND_ENABLED: 'false'
+    volumes:
+      - ../../app:/var/www
+      - ${NAF_BENCH_SOURCE_ROOT:-../../../nafphp}:/var/nafphp:ro
+    ports: !override ['127.0.0.1:38544:8443']
+volumes:
+  probe-db:
+  probe-storage:

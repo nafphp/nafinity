@@ -1,0 +1,27 @@
+{
+  "recorded_at": "2026-10-06",
+  "cases": [
+    {
+      "running": true,
+      "probe_exit": 0,
+      "forwarded_exit": 17,
+      "arguments_preserved": true,
+      "no_php_fallback": true
+    },
+    {
+      "running": false,
+      "probe_exit": 0,
+      "forwarded_exit": 19,
+      "arguments_preserved": true,
+      "no_php_fallback": true
+    },
+    {
+      "running": true,
+      "probe_exit": 13,
+      "forwarded_exit": 13,
+      "arguments_preserved": false,
+      "no_php_fallback": true
+    }
+  ],
+  "note": "On probe failure no command is forwarded, so arguments_preserved is false by design. The probe error exits directly without executing local PHP. Real command:list was also run from /private/tmp against Compose and its source overlay."
+}
