@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.."
 compose_files=${COMPOSE_FILE:-$(sed -n 's/^COMPOSE_FILE=//p' .env 2>/dev/null)}
 case "$compose_files" in
     *compose.dev.yaml*)
-        node bin/generate-dev-manifest
+        # The checkouts compose.dev.yaml mounts, which .env may put elsewhere.
+        NAF_SOURCE_ROOT=${NAF_SOURCE_ROOT:-$(sed -n 's/^NAF_SOURCE_ROOT=//p' .env 2>/dev/null)} \
+            node bin/generate-dev-manifest
         exec docker compose run --rm --no-deps -e COMPOSER=composer.dev.json app composer "$@"
         ;;
 esac

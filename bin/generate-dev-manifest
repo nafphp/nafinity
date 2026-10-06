@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const sources = resolve(root, process.env.NAF_SOURCE_ROOT ?? '../nafphp');
+const sources = resolve(root, process.env.NAF_SOURCE_ROOT || '../nafphp');
 const manifest = JSON.parse(readFileSync(join(root, 'app/composer.json'), 'utf8'));
 
 const read = (folder) => JSON.parse(readFileSync(join(sources, folder, 'composer.json'), 'utf8'));
