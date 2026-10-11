@@ -1,11 +1,11 @@
 # Based on fkde/aspx: Alpine, native PHP packages, nginx and supervisor.
 ARG ALPINE_IMAGE=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 FROM ${ALPINE_IMAGE} AS runtime
-RUN apk add --no-cache ca-certificates curl msmtp nginx supervisor tzdata \
+RUN apk add --no-cache ca-certificates curl nginx supervisor tzdata \
     php85 php85-fpm php85-pdo_mysql \
     php85-session php85-mbstring php85-openssl php85-curl php85-dom php85-xml \
     php85-xmlwriter php85-simplexml php85-fileinfo php85-tokenizer php85-ctype \
-    php85-iconv php85-phar php85-ldap php85-intl php85-sodium \
+    php85-iconv php85-phar php85-ldap php85-intl php85-sodium php85-zip \
     && ln -sf /usr/bin/php85 /usr/bin/php \
     && addgroup -g 1000 www && adduser -D -u 1000 -G www www \
     && mkdir -p /var/www/storage /tmp/nginx /tmp/php \

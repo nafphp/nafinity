@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Naf\Board\Models\User;
-use Naf\Mail\Core\Transport\MailTransport;
+use Naf\Mail\Core\Transport\SmtpTransport;
 use Naf\Storage\Adapters\LocalAdapter;
 
 /**
@@ -41,11 +41,43 @@ return [
     'session'         => ['storage' => 'default', 'trust_proxy_headers' => false],
     'csrf_validation' => true,
 
-    // Off by default: an installation that delivers mail should say so
-    // deliberately, and say who it comes from. The transport is PHP's mail(),
-    // which the image hands to msmtp; docker/rootfs/etc/msmtprc says where to.
-    'nafinity' => ['mail_enabled' => false, 'mail_from' => 'ENV:NAFINITY_MAIL_FROM'],
-    'mail'     => ['transport' => MailTransport::class],
+    // One account for system mail, invitations, notifications and ticket replies.
+    // naf/mail sends directly over SMTP in PHP. SMTP/IMAP inherit username and
+    // password below; fill their overrides only when the provider needs them.
+    // Empty shared username means the From address is the mailbox login.
+    // Normal project notifications stay off by default. Account security mail
+    // and explicitly enabled Mail-to-Ticket confirmations use the same sender.
+    'mail' => [
+        'transport'             => SmtpTransport::class,
+        'from'                  => 'ENV:NAFINITY_MAIL_FROM',
+        'reply_to'              => 'ENV:NAFINITY_MAIL_REPLY_TO',
+        'username'              => 'ENV:NAFINITY_MAIL_USER',
+        'password'              => 'ENV:NAFINITY_MAIL_PASSWORD',
+        'notifications_enabled' => 'ENV:NAFINITY_MAIL_ENABLED',
+        'smtp'                  => [
+            'host'           => 'ENV:NAFINITY_SMTP_HOST',
+            'port'           => 'ENV:NAFINITY_SMTP_PORT',
+            'security'       => 'ENV:NAFINITY_SMTP_SECURITY',
+            'authentication' => 'ENV:NAFINITY_SMTP_AUTH',
+            'username'       => 'ENV:NAFINITY_SMTP_USER',
+            'password'       => 'ENV:NAFINITY_SMTP_PASSWORD',
+            'ca_file'        => 'ENV:NAFINITY_SMTP_CA_FILE',
+        ],
+        // Known case numbers and their stored requester address only. The actor
+        // is a Nafinity account with read/comment permission in each project.
+        'imap' => [
+            'enabled'        => 'ENV:NAFINITY_IMAP_ENABLED',
+            'host'           => 'ENV:NAFINITY_IMAP_HOST',
+            'port'           => 'ENV:NAFINITY_IMAP_PORT',
+            'security'       => 'ENV:NAFINITY_IMAP_SECURITY',
+            'authentication' => 'ENV:NAFINITY_IMAP_AUTH',
+            'folder'         => 'ENV:NAFINITY_IMAP_FOLDER',
+            'actor'          => 'ENV:NAFINITY_MAIL_ACTOR',
+            'username'       => 'ENV:NAFINITY_IMAP_USER',
+            'password'       => 'ENV:NAFINITY_IMAP_PASSWORD',
+            'ca_file'        => 'ENV:NAFINITY_IMAP_CA_FILE',
+        ],
+    ],
 
     /*
      * Live updates. Off by default: the pages work without them, so an
