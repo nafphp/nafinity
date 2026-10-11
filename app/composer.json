@@ -6,6 +6,7 @@
     "require": {
         "php": ">=8.3",
         "naf/board": "^0.1.5",
+        "naf/mail": "^0.2.3",
         "naf/websocket": "^0.1.0"
     },
     "autoload": {

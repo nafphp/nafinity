@@ -12,7 +12,7 @@ BACKUP       ?=
 .NOTPARALLEL:
 .PHONY: help first-install storage-dirs install assets create-env-file check-env-file \
         certificates certificates-shared config-check build-app run up stop down restart \
-        restart-background mailpit supervisor-status status logs ssh shell \
+        restart-background mailpit mail-check mail-imap-check supervisor-status status logs ssh shell \
         composer composer-install composer-update naf migrate roles seed websocket websocket-status \
         health assets-check style-install style-check style-fix backup verify-restore
 
@@ -91,6 +91,12 @@ restart-background: check-env-file ## Reload worker and scheduler after PHP sour
 
 mailpit: config-check ## Start the local test mailbox at http://localhost:8025
 	@$(COMPOSE) up -d --wait mailpit
+
+mail-check: config-check ## Check SMTP TLS and login through naf/mail without sending mail
+	@bin/naf nafinity:mail:smtp:check
+
+mail-imap-check: config-check ## Check the IMAP connection and Mail-to-Ticket account
+	@bin/naf nafinity:mail:check
 
 supervisor-status: check-env-file ## Show nginx, PHP-FPM, queue worker and scheduler
 	@$(SUPERVISOR) status
