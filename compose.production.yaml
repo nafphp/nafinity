@@ -1,0 +1,78 @@
+name: nafinity-production
+services:
+  app:
+    image: ${NAFINITY_IMAGE:?Set NAFINITY_IMAGE to a tested version or digest}
+    environment:
+      APP_ENV: prod
+      APP_URL: ${NAFINITY_APP_URL:?Set the public HTTPS URL}
+      DB_DRIVER: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: nafinity
+      DB_USERNAME: nafinity
+      DB_PASSWORD: ${NAFINITY_DB_PASSWORD:?Set a database password}
+      NAFINITY_BACKGROUND_ENABLED: "true"
+      WEBSOCKET_ENABLED: "false"
+      NAFINITY_MAIL_FROM: ${NAFINITY_MAIL_FROM:-}
+      NAFINITY_MAIL_REPLY_TO: ${NAFINITY_MAIL_REPLY_TO:-${NAFINITY_MAIL_FROM:-}}
+      NAFINITY_MAIL_USER: ${NAFINITY_MAIL_USER:-}
+      NAFINITY_MAIL_PASSWORD: ${NAFINITY_MAIL_PASSWORD:-}
+      NAFINITY_MAIL_ENABLED: ${NAFINITY_MAIL_ENABLED:-false}
+      NAFINITY_SMTP_HOST: ${NAFINITY_SMTP_HOST:-}
+      NAFINITY_SMTP_PORT: ${NAFINITY_SMTP_PORT:-587}
+      NAFINITY_SMTP_SECURITY: ${NAFINITY_SMTP_SECURITY:-starttls}
+      NAFINITY_SMTP_AUTH: ${NAFINITY_SMTP_AUTH:-auto}
+      NAFINITY_SMTP_USER: ${NAFINITY_SMTP_USER:-}
+      NAFINITY_SMTP_PASSWORD: ${NAFINITY_SMTP_PASSWORD:-}
+      NAFINITY_SMTP_CA_FILE: ${NAFINITY_SMTP_CA_FILE:-}
+      NAFINITY_IMAP_ENABLED: ${NAFINITY_IMAP_ENABLED:-false}
+      NAFINITY_IMAP_HOST: ${NAFINITY_IMAP_HOST:-}
+      NAFINITY_IMAP_PORT: ${NAFINITY_IMAP_PORT:-993}
+      NAFINITY_IMAP_SECURITY: ${NAFINITY_IMAP_SECURITY:-ssl}
+      NAFINITY_IMAP_USER: ${NAFINITY_IMAP_USER:-}
+      NAFINITY_IMAP_PASSWORD: ${NAFINITY_IMAP_PASSWORD:-}
+      NAFINITY_IMAP_AUTH: ${NAFINITY_IMAP_AUTH:-password}
+      NAFINITY_IMAP_FOLDER: ${NAFINITY_IMAP_FOLDER:-INBOX}
+      NAFINITY_IMAP_CA_FILE: ${NAFINITY_IMAP_CA_FILE:-}
+      NAFINITY_MAIL_ACTOR: ${NAFINITY_MAIL_ACTOR:-}
+    volumes:
+      - storage:/var/www/storage
+      - ${NAFINITY_TLS_DIR:?Mount a fullchain.pem and privkey.pem readable by uid 1000}:/etc/nginx/ssl:ro
+    ports:
+      - "${NAFINITY_HTTP_BIND:-0.0.0.0:80}:8080"
+      - "${NAFINITY_HTTPS_BIND:-0.0.0.0:443}:8443"
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1770
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    stop_grace_period: 40s
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  db:
+    image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+    environment:
+      MARIADB_DATABASE: nafinity
+      MARIADB_USER: nafinity
+      MARIADB_PASSWORD: ${NAFINITY_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${NAFINITY_DB_ROOT_PASSWORD:?Set a different root password}
+    volumes: [database:/var/lib/mysql]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+volumes:
+  database:
+  storage:

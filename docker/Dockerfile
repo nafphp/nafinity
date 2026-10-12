@@ -1,7 +1,8 @@
 # Based on fkde/aspx: Alpine, native PHP packages, nginx and supervisor.
 ARG ALPINE_IMAGE=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 FROM ${ALPINE_IMAGE} AS runtime
-RUN apk add --no-cache ca-certificates curl nginx supervisor tzdata \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates curl nginx supervisor tzdata \
     php85 php85-fpm php85-pdo_mysql \
     php85-session php85-mbstring php85-openssl php85-curl php85-dom php85-xml \
     php85-xmlwriter php85-simplexml php85-fileinfo php85-tokenizer php85-ctype \
@@ -29,7 +30,7 @@ COPY docker/development/rootfs/ /
 USER www
 
 # The installation as it ships: dependencies from the published packages (from
-# app/composer.lock when there is one), their public files copied into public/,
+# app/composer.lock), their public files copied into public/,
 # and no Composer left in the image.
 FROM runtime AS build
 USER root
@@ -37,10 +38,18 @@ RUN apk add --no-cache composer
 USER www
 COPY --chown=www:www app/ /var/www/
 # The board refuses to boot without database settings; publishing never connects.
-RUN composer install --no-dev --no-interaction --no-progress --classmap-authoritative \
+RUN test -f composer.lock \
+    && composer validate --strict \
+    && composer install --no-dev --no-interaction --no-progress --classmap-authoritative \
+    && composer check-platform-reqs --no-dev \
     && mkdir -p storage/sessions storage/logs storage/attachments storage/queue storage/schedule storage/oauth \
     && DB_DRIVER=mysql DB_HOST=unused DB_DATABASE=unused DB_USERNAME=unused DB_PASSWORD=unused \
         php vendor/bin/naf nafinity:assets:publish
 
 FROM runtime AS production
 COPY --from=build --chown=www:www /var/www /var/www
+COPY docker/production/rootfs/ /
+ENV APP_ENV=prod
+LABEL org.opencontainers.image.source="https://github.com/nafphp/nafinity" \
+    org.opencontainers.image.title="Nafinity" \
+    org.opencontainers.image.description="Nafinity ticket and Kanban board installation"

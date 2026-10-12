@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+umask 077
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+restore_backup=$(CDPATH='' cd -- "${1:?Pass a production backup directory}" && pwd)
+restore_check=$(mktemp -d "${TMPDIR:-/tmp}/nafinity-restore.XXXXXX")
+# Check fixed filenames only; never execute commands from a backup manifest.
+(cd "$restore_backup" && shasum -a 256 database.sql storage.tar.gz images.txt image-digests.txt storage-files.json) \
+    > "$restore_check/SHA256SUMS"
+trap 'rm -rf "$restore_check"' EXIT
+cmp "$restore_backup/SHA256SUMS" "$restore_check/SHA256SUMS"
+
+# A separate database AND storage volume: the running deployment is never restored over.
+NAFINITY_PRODUCTION_PROJECT="nafinity-restore-$(date +%s)-$$"
+export NAFINITY_PRODUCTION_PROJECT
+export NAFINITY_HTTP_BIND=127.0.0.1:0 NAFINITY_HTTPS_BIND=127.0.0.1:0
+cleanup() {
+    "$root/bin/production" down --volumes --remove-orphans >/dev/null
+    rm -rf "$restore_check"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+"$root/bin/production" up -d --wait --wait-timeout 120 db
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T db sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot "$MARIADB_DATABASE"' \
+    < "$restore_backup/database.sql"
+"$root/bin/production" run --rm --no-deps -T --entrypoint tar app \
+    -xzf - -C /var/www/storage < "$restore_backup/storage.tar.gz"
+# A byte comparison of the restored tree before workers/sessions can alter it.
+"$root/bin/production-storage-manifest" > "$restore_check/storage-files.json"
+cmp "$restore_backup/storage-files.json" "$restore_check/storage-files.json"
+"$root/bin/production" up -d --wait --wait-timeout 120 app
+"$root/bin/production" exec -T app php vendor/bin/naf nafinity:assets:check
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T db sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot "$MARIADB_DATABASE" -N -e "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM tickets; SELECT COUNT(*) FROM migrations;"'
+echo 'Restore verified in disposable database/storage volumes; application readiness and assets passed.'

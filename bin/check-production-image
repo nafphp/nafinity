@@ -1,0 +1,86 @@
+#!/bin/sh
+set -eu
+umask 077
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+export NAFINITY_IMAGE="${1:?Pass the locally built production image}"
+check_dir=$(mktemp -d "${TMPDIR:-/tmp}/nafinity-image.XXXXXX")
+export NAFINITY_PRODUCTION_ENV="$check_dir/deployment.env"
+NAFINITY_PRODUCTION_PROJECT="nafinity-image-$(date +%s)-$$"
+export NAFINITY_PRODUCTION_PROJECT
+cleanup() {
+    check_result=$?
+    if [ "$check_result" -ne 0 ]; then
+        "$root/bin/production" logs --no-color --tail 80 app >&2 || true
+    fi
+    "$root/bin/production" down --volumes --remove-orphans >/dev/null
+    rm -rf "$check_dir"
+    return "$check_result"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+mkdir "$check_dir/tls"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost \
+    -keyout "$check_dir/tls/privkey.pem" -out "$check_dir/tls/fullchain.pem" >/dev/null 2>&1
+# Disposable fixture key only. Real keys must be readable by uid 1000 without public access.
+chmod 755 "$check_dir" "$check_dir/tls"
+chmod 644 "$check_dir/tls/privkey.pem" "$check_dir/tls/fullchain.pem"
+cat > "$NAFINITY_PRODUCTION_ENV" <<EOF
+NAFINITY_APP_URL=https://localhost
+NAFINITY_HTTP_BIND=127.0.0.1:0
+NAFINITY_HTTPS_BIND=127.0.0.1:0
+NAFINITY_TLS_DIR=$check_dir/tls
+NAFINITY_DB_PASSWORD=$(openssl rand -hex 24)
+NAFINITY_DB_ROOT_PASSWORD=$(openssl rand -hex 24)
+NAFINITY_MAIL_FROM=probe@example.test
+EOF
+"$root/bin/production" config --quiet
+"$root/bin/production" up -d --wait --wait-timeout 120 db
+"$root/bin/production" run --rm --no-deps -T app php vendor/bin/naf db:migrate up
+"$root/bin/production" run --rm --no-deps -T app php vendor/bin/naf rbac:sync
+"$root/bin/production" run --rm --no-deps -T app php vendor/bin/naf nafinity:assets:check
+if "$root/bin/production" run --rm --no-deps -T app php vendor/bin/naf nafinity:seed; then
+    echo 'Production must reject demo seeding.' >&2; exit 1
+fi
+printf '%s' 'Production probe password 42!' | \
+    "$root/bin/production" run --rm --no-deps -T app \
+    php vendor/bin/naf nafinity:user probe@example.test 'Production Probe' --admin
+"$root/bin/production" up -d --wait --wait-timeout 120 app
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T app sh -c \
+    'test "$(id -u)" = 1000 && ! command -v composer && test ! -f /var/www/.env && ! touch /var/www/.write-probe 2>/dev/null'
+"$root/bin/production" exec -T app curl -fkSs https://localhost:8443/login > "$check_dir/login.html"
+grep -q 'name="_csrf"' "$check_dir/login.html"
+"$root/bin/production" exec -T app curl -fkSs -D - https://localhost:8443/health/ready > "$check_dir/headers"
+grep -qi 'strict-transport-security:' "$check_dir/headers"
+grep -qi 'content-security-policy:' "$check_dir/headers"
+"$root/bin/production" exec -T app php < "$root/tools/production-http-check.php"
+for path in /.env /composer.json /vendor/autoload.php /storage/attachments/probe; do
+    code=$("$root/bin/production" exec -T app curl -ksS -o /dev/null -w '%{http_code}' "https://localhost:8443$path")
+    case "$code" in 403|404) ;; *) echo "Private path answered $code: $path" >&2; exit 1 ;; esac
+done
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T app sh -c \
+    'printf "%s" "persistent production probe" > storage/attachments/production-probe.txt'
+"$root/bin/production" up -d --force-recreate --wait --wait-timeout 120 app
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T app sh -c \
+    'test "$(cat storage/attachments/production-probe.txt)" = "persistent production probe"'
+"$root/bin/production-backup" "$check_dir/backup"
+cp "$check_dir/backup/SHA256SUMS" "$check_dir/expected-checksums"
+printf '%s\n' 'deliberately corrupted checksum' > "$check_dir/backup/SHA256SUMS"
+if "$root/bin/production-verify-restore" "$check_dir/backup"; then
+    echo 'Restore verification accepted a damaged backup.' >&2; exit 1
+fi
+cp "$check_dir/expected-checksums" "$check_dir/backup/SHA256SUMS"
+"$root/bin/production-verify-restore" "$check_dir/backup"
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T db sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot "$MARIADB_DATABASE" -N -e "SELECT email FROM users WHERE email=\"probe@example.test\";"' \
+    > "$check_dir/account"
+grep -qx 'probe@example.test' "$check_dir/account"
+echo 'Production image passed clean install, first admin, HTTP safety, worker readiness, persistence and backup/restore checks.'

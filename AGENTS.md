@@ -45,12 +45,15 @@ update quietly puts it back.
     make health            readiness: database, migrations, storage, published assets
     bin/style check        this installation's PHP formatting, in the container
 
-There are no tests here. naf/board and the other packages test themselves in their own
-repositories; this installation is checked by using it, and `make health` says whether it
-is ready.
+naf/board and the other packages test themselves in their own repositories. This
+installation is checked by using it: `make health` checks development readiness,
+and `bin/check-production-image IMAGE` boots an isolated production deployment,
+checks first-account setup, persistence and backup restoration, then removes only
+its own temporary containers and volumes. CI runs it on amd64 and arm64.
 
-`composer install` takes naf/board and everything else from Packagist, at the version
-current when it runs; updating later is the owner's decision. For developing the NAF
+`app/composer.lock` records the published packages used in the official image.
+`composer install` uses that lock; updating and committing the lock later is the
+owner's decision. The PHP platform stays at the supported minimum, 8.3. For developing the NAF
 packages themselves, `.env` sets `COMPOSE_FILE=compose.yaml:compose.dev.yaml` (bin/init-env
 does that when it finds them beside this project): their working copies under
 `NAF_SOURCE_ROOT` are mounted, and `bin/composer` installs every one the installation needs
@@ -59,6 +62,12 @@ repositories, because it describes a real installation.
 
 `docker build --target production -f docker/Dockerfile .` builds the image that ships: dependencies from Packagist,
 the packages' public files published into `public/`, no Composer and no source mounts.
+The image requires mounted TLS certificates; `compose.production.yaml` supplies
+the deployment configuration and persistent database/storage volumes. Migrations
+and RBAC synchronization are explicit deployment steps, never automatic on start.
+The Container workflow checks pull requests, publishes `main` after merges into
+`main`, and publishes version/latest tags for stable GitHub releases. Source PRs
+still require maintainer review before merging.
 
 ## Never committed
 

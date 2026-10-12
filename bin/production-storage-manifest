@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+# PHP variables are passed literally to the container.
+# shellcheck disable=SC2016
+exec "$root/bin/production" run --rm --no-deps -T --entrypoint php app -r '
+$root = "/var/www/storage/";
+$files = [];
+$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($iterator as $file) {
+    if ($file->isLink()) { throw new RuntimeException("Storage backup does not support symbolic links."); }
+    if ($file->isFile()) {
+        $digest = hash_file("sha256", $file->getPathname());
+        if ($digest === false) { throw new RuntimeException("Cannot hash storage file."); }
+        $files[substr($file->getPathname(), strlen($root))] = $digest;
+    }
+}
+ksort($files);
+echo json_encode($files, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT), "\n";
+'

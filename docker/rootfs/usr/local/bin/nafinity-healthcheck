@@ -7,9 +7,16 @@ set -eu
 curl --fail --silent --show-error --insecure \
     https://localhost:8443/health/live >/dev/null
 
+if [ "${APP_ENV:-dev}" = prod ]; then
+    curl --fail --silent --show-error --insecure \
+        https://localhost:8443/health/ready >/dev/null
+fi
+
 if [ "${NAFINITY_BACKGROUND_ENABLED:-true}" = true ]; then
     supervisorctl -c /etc/supervisor/conf.d/supervisord.conf \
         status queue-worker schedule-ticker >/dev/null
+    # PHP variables must reach PHP literally.
+    # shellcheck disable=SC2016
     php -r '
         foreach (["worker", "ticker"] as $process) {
             $path = "/tmp/nafinity-" . $process . "-heartbeat";
