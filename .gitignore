@@ -1,4 +1,6 @@
 /.env
+/.env.production
+/deploy/tls/
 /app/.env*
 !/app/.env.example
 /app/vendor/

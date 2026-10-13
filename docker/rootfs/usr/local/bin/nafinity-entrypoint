@@ -1,6 +1,18 @@
 #!/bin/sh
 set -eu
 
+# A read-only deployment mounts a fresh tmpfs over /tmp.
+mkdir -p /tmp/nginx /tmp/php
+
+if [ "${APP_ENV:-dev}" = prod ]; then
+    case "${APP_URL:-}" in
+        https://*) ;;
+        *) echo 'Production requires APP_URL with an https:// URL.' >&2; exit 1 ;;
+    esac
+fi
+
 # APP_URL includes the published HTTPS port; nginx does not expand environment variables.
+# Keep nginx's request variable literal.
+# shellcheck disable=SC2016
 printf 'return 308 %s$request_uri;\n' "${APP_URL:-https://localhost}" > /tmp/nginx/redirect.conf
 exec "$@"

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+production_env=${NAFINITY_PRODUCTION_ENV:-$root/.env.production}
+if [ ! -f "$production_env" ]; then
+    echo 'Copy .env.production.example to .env.production and configure the deployment first.' >&2
+    exit 1
+fi
+# Explicit file/project selection never inherits development's COMPOSE_FILE.
+exec docker compose --env-file "$production_env" \
+    -f "$root/compose.production.yaml" \
+    --project-name "${NAFINITY_PRODUCTION_PROJECT:-nafinity-production}" "$@"

@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+umask 077
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+backup_dir=${1:?Pass a NEW private backup directory}
+case "$backup_dir" in /*) ;; *) backup_dir="$PWD/$backup_dir" ;; esac
+case "$backup_dir/" in "$root/app/public/"*) echo 'Backup destination cannot be public.' >&2; exit 2 ;; esac
+# Refuse to overwrite an existing backup, including an incomplete one.
+mkdir -m 700 "$backup_dir"
+writer_ids=$("$root/bin/production" ps --status running -q app)
+resume_writers() {
+    for writer_id in $writer_ids; do docker start "$writer_id" >/dev/null; done
+}
+trap resume_writers EXIT
+trap 'exit 1' HUP INT TERM
+for writer_id in $writer_ids; do docker stop --time 40 "$writer_id" >/dev/null; done
+
+# Expand variables inside the container, never in the host shell.
+# shellcheck disable=SC2016
+"$root/bin/production" exec -T db sh -c \
+    'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot --single-transaction --quick --hex-blob "$MARIADB_DATABASE"' \
+    > "$backup_dir/database.sql"
+"$root/bin/production" run --rm --no-deps -T --entrypoint tar app \
+    -czf - -C /var/www/storage . > "$backup_dir/storage.tar.gz"
+"$root/bin/production" config --images > "$backup_dir/images.txt"
+app_ids=$("$root/bin/production" ps --all -q app)
+: > "$backup_dir/image-digests.txt"
+for app_id in $app_ids; do
+    image_id=$(docker inspect --format '{{.Image}}' "$app_id")
+    docker image inspect --format '{{.Id}} {{json .RepoDigests}}' "$image_id" \
+        >> "$backup_dir/image-digests.txt"
+done
+"$root/bin/production-storage-manifest" > "$backup_dir/storage-files.json"
+(cd "$backup_dir" && shasum -a 256 database.sql storage.tar.gz images.txt image-digests.txt storage-files.json > SHA256SUMS)
+echo "Backup created: $backup_dir"

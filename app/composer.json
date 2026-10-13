@@ -5,7 +5,7 @@
     "license": "proprietary",
     "require": {
         "php": ">=8.3",
-        "naf/board": "^0.1.5",
+        "naf/board": "^0.1.7",
         "naf/mail": "^0.2.3",
         "naf/websocket": "^0.1.0"
     },
@@ -15,6 +15,9 @@
         }
     },
     "config": {
+        "platform": {
+            "php": "8.3.0"
+        },
         "sort-packages": true,
         "allow-plugins": false
     },

@@ -1,5 +1,7 @@
 .git
 .env
+.env.*
+deploy
 .idea
 work
 tools
