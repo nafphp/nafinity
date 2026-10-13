@@ -5,7 +5,7 @@
     "license": "proprietary",
     "require": {
         "php": ">=8.3",
-        "naf/board": "^0.1.7",
+        "naf/board": "^0.1.8",
         "naf/mail": "^0.2.3",
         "naf/websocket": "^0.1.0"
     },

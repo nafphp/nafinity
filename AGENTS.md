@@ -65,7 +65,12 @@ the packages' public files published into `public/`, no Composer and no source m
 The image requires mounted TLS certificates; `compose.production.yaml` supplies
 the deployment configuration and persistent database/storage volumes. Migrations
 and RBAC synchronization are explicit deployment steps, never automatic on start.
-The Container workflow checks pull requests, publishes `main` after merges into
+`make image` builds the production target with `IMAGE_TAG` (default `sha-<commit>`)
+and `latest` under `IMAGE` (default `ghcr.io/nafphp/nafinity`). `make publish` pushes
+those existing local tags after checking that they refer to the same image. Local
+builds use the host's architecture; the Container workflow publishes both architectures.
+
+The Container workflow checks pull requests, publishes `main` and `latest` after merges into
 `main`, and publishes version/latest tags for stable GitHub releases. Source PRs
 still require maintainer review before merging.
 

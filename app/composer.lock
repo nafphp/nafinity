@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fc90b639e62b71e0846ad368f545f88d",
+    "content-hash": "19f9813923be3bf0b9a8b66feed88a3d",
     "packages": [
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -1267,16 +1267,16 @@
         },
         {
             "name": "naf/board",
-            "version": "v0.1.7",
+            "version": "v0.1.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nafphp/board.git",
-                "reference": "a09259837f885515e422b965785f00df4cf2dc17"
+                "reference": "136fba3dcd07785dd335af8629e290f0ca2d9aca"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nafphp/board/zipball/a09259837f885515e422b965785f00df4cf2dc17",
-                "reference": "a09259837f885515e422b965785f00df4cf2dc17",
+                "url": "https://api.github.com/repos/nafphp/board/zipball/136fba3dcd07785dd335af8629e290f0ca2d9aca",
+                "reference": "136fba3dcd07785dd335af8629e290f0ca2d9aca",
                 "shasum": ""
             },
             "require": {
@@ -1362,9 +1362,9 @@
             "description": "Project-isolated Kanban boards for NAF, with an extension platform.",
             "support": {
                 "issues": "https://github.com/nafphp/board/issues",
-                "source": "https://github.com/nafphp/board/tree/v0.1.7"
+                "source": "https://github.com/nafphp/board/tree/v0.1.8"
             },
-            "time": "2026-10-13T16:48:16+00:00"
+            "time": "2026-10-13T20:28:55+00:00"
         },
         {
             "name": "naf/cli",

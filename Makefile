@@ -7,6 +7,8 @@ ARGS         ?=
 SERVICES     ?= app
 TAIL         ?= 50
 BACKUP       ?=
+IMAGE        ?= ghcr.io/nafphp/nafinity
+IMAGE_TAG    ?= sha-$(shell git rev-parse HEAD)
 
 # Installations and database checks must also run in order with make -j.
 .NOTPARALLEL:
@@ -14,7 +16,7 @@ BACKUP       ?=
         certificates certificates-shared config-check build-app run up stop down restart \
         restart-background mailpit mail-check mail-imap-check supervisor-status status logs ssh shell \
         composer composer-install composer-update naf migrate roles seed websocket websocket-status \
-        health assets-check style-install style-check style-fix backup verify-restore
+        health assets-check style-install style-check style-fix backup verify-restore image publish
 
 help: ## Show available commands (the default)
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  %-22s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -71,6 +73,18 @@ config-check: check-env-file ## Validate Compose without printing secrets
 
 build-app: config-check ## Build the development image
 	@$(COMPOSE) build app
+
+image: ## Build the production image with IMAGE_TAG and latest (default IMAGE=ghcr.io/nafphp/nafinity)
+	@docker build --pull --target production -f docker/Dockerfile \
+		--tag "$(IMAGE):$(IMAGE_TAG)" --tag "$(IMAGE):latest" .
+
+publish: ## Push the existing IMAGE_TAG and latest; authenticate with docker login first
+	@tagged=$$(docker image inspect --format '{{.Id}}' "$(IMAGE):$(IMAGE_TAG)") && \
+		latest=$$(docker image inspect --format '{{.Id}}' "$(IMAGE):latest") && \
+		[ "$$tagged" = "$$latest" ] || \
+		{ echo 'IMAGE_TAG and latest must refer to the same local image. Run make image with these settings first.' >&2; exit 2; }
+	@docker push "$(IMAGE):$(IMAGE_TAG)"
+	@if [ "$(IMAGE_TAG)" != latest ]; then docker push "$(IMAGE):latest"; fi
 
 run: config-check certificates ## Start app, database, queue worker and scheduler; wait for health
 	@$(COMPOSE) up -d --wait app
